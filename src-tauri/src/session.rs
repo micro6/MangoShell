@@ -3,10 +3,14 @@ use std::sync::Arc;
 use std::time::Duration;
 
 use anyhow::{anyhow, bail, Context};
-use russh::client::{self, Handle};
+use russh::client::{self, ChannelOpenHandle, Handle, Msg};
 use russh::keys::{HashAlg, PrivateKey, PrivateKeyWithHashAlg, PublicKeyOrCertificate};
+use russh::{Channel, ChannelOpenFailure};
 use sqlx::SqlitePool;
+use tokio::net::TcpStream;
 use tokio::sync::RwLock;
+
+use crate::forward::{bridge, ForwardRegistry};
 
 const KEEPALIVE_INTERVAL: Duration = Duration::from_secs(30);
 const KEEPALIVE_MAX: usize = 3;
@@ -23,6 +27,8 @@ pub struct SessionManager {
     conns: RwLock<HashMap<String, Arc<HostConnection>>>,
     /// host_id → 密码。仅保存在内存，M2 迁移到 OS Keyring
     passwords: RwLock<HashMap<String, String>>,
+    /// 远程转发注册表：服务器回推通道时按监听端口查本地目标
+    forwards: Arc<ForwardRegistry>,
 }
 
 #[derive(sqlx::FromRow)]
@@ -35,11 +41,12 @@ struct HostRow {
 }
 
 impl SessionManager {
-    pub fn new(pool: SqlitePool) -> Self {
+    pub fn new(pool: SqlitePool, forwards: Arc<ForwardRegistry>) -> Self {
         Self {
             pool,
             conns: RwLock::new(HashMap::new()),
             passwords: RwLock::new(HashMap::new()),
+            forwards,
         }
     }
 
@@ -113,7 +120,12 @@ impl SessionManager {
     ) -> anyhow::Result<Handle<HostKeyVerifier>> {
         let config = client_config();
 
-        let verifier = HostKeyVerifier::new(self.pool.clone(), host.to_string(), port);
+        let verifier = HostKeyVerifier::new(
+            self.pool.clone(),
+            host.to_string(),
+            port,
+            self.forwards.clone(),
+        );
         log::info!("正在连接 {username}@{host}:{port}");
         let mut handle = client::connect(config, (host, port), verifier)
             .await
@@ -159,7 +171,12 @@ impl SessionManager {
         username: &str,
         key: PrivateKey,
     ) -> anyhow::Result<Handle<HostKeyVerifier>> {
-        let verifier = HostKeyVerifier::new(self.pool.clone(), host.to_string(), port);
+        let verifier = HostKeyVerifier::new(
+            self.pool.clone(),
+            host.to_string(),
+            port,
+            self.forwards.clone(),
+        );
         log::info!("正在连接 {username}@{host}:{port}（密钥认证）");
         let mut handle = client::connect(client_config(), (host, port), verifier)
             .await
@@ -206,11 +223,22 @@ pub struct HostKeyVerifier {
     pool: SqlitePool,
     host: String,
     port: u16,
+    forwards: Arc<ForwardRegistry>,
 }
 
 impl HostKeyVerifier {
-    pub fn new(pool: SqlitePool, host: String, port: u16) -> Self {
-        Self { pool, host, port }
+    pub fn new(
+        pool: SqlitePool,
+        host: String,
+        port: u16,
+        forwards: Arc<ForwardRegistry>,
+    ) -> Self {
+        Self {
+            pool,
+            host,
+            port,
+            forwards,
+        }
     }
 }
 
@@ -292,5 +320,47 @@ impl client::Handler for HostKeyVerifier {
                 Ok(true)
             }
         }
+    }
+
+    /// 服务器为 -R 规则回推的通道：按监听端口找到本地目标并桥接
+    async fn server_channel_open_forwarded_tcpip(
+        &mut self,
+        channel: Channel<Msg>,
+        connected_address: &str,
+        connected_port: u32,
+        originator_address: &str,
+        originator_port: u32,
+        reply: ChannelOpenHandle,
+        _session: &mut client::Session,
+    ) -> Result<(), Self::Error> {
+        let Some(target) = self.forwards.lookup(connected_port as u16).await else {
+            log::warn!("收到未注册的远程转发通道: {connected_address}:{connected_port}");
+            reply
+                .reject(ChannelOpenFailure::AdministrativelyProhibited)
+                .await;
+            return Ok(());
+        };
+
+        match TcpStream::connect((target.host.as_str(), target.port)).await {
+            Ok(stream) => {
+                reply.accept().await;
+                log::info!(
+                    "远程转发通道已建立: {originator_address}:{originator_port} → {}:{}",
+                    target.host,
+                    target.port
+                );
+                let counters = target.counters.clone();
+                let dest = format!("{}:{}", target.host, target.port);
+                tokio::spawn(async move {
+                    bridge(stream, channel.into_stream(), counters).await;
+                    log::info!("远程转发通道已关闭: {dest}");
+                });
+            }
+            Err(e) => {
+                log::warn!("远程转发目标不可达 {}:{}: {e}", target.host, target.port);
+                reply.reject(ChannelOpenFailure::ConnectFailed).await;
+            }
+        }
+        Ok(())
     }
 }

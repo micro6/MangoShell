@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, onMounted, onUnmounted, ref, watch } from "vue";
 import { invoke } from "@tauri-apps/api/core";
-import { FolderOpen, FolderPlus, PanelLeft, Plug, Upload } from "@lucide/vue";
+import { FolderOpen, FolderPlus, PanelLeft, Plug, Upload, Waypoints } from "@lucide/vue";
 import { toast } from "vue-sonner";
 import HostTree from "@/components/host/HostTree.vue";
 import HostEditor from "@/components/host/HostEditor.vue";
@@ -9,6 +9,7 @@ import KeyManager from "@/components/host/KeyManager.vue";
 import KnownHosts from "@/components/host/KnownHosts.vue";
 import QuickConnect, { type ConnectPayload } from "@/components/host/QuickConnect.vue";
 import StatusBar from "@/components/common/StatusBar.vue";
+import ForwardPane from "@/components/forward/ForwardPane.vue";
 import SftpPane from "@/components/sftp/SftpPane.vue";
 import TabBar from "@/components/term/TabBar.vue";
 import TerminalPane from "@/components/term/TerminalPane.vue";
@@ -46,6 +47,23 @@ function openSftp() {
   store.openTab({
     title: `${tab.title} · SFTP`,
     kind: "sftp",
+    state: "connected",
+    hostId: tab.hostId,
+  });
+}
+
+/** 隧道属于主机，已连接的标签都可以打开 */
+const canOpenForward = computed(
+  () => Boolean(activeTab.value?.hostId) && activeTab.value?.state === "connected",
+);
+
+function openForward() {
+  const tab = activeTab.value;
+  if (!tab?.hostId) return;
+  const alias = hosts.items.find((h) => h.id === tab.hostId)?.alias ?? tab.title;
+  store.openTab({
+    title: `${alias} · 隧道`,
+    kind: "forward",
     state: "connected",
     hostId: tab.hostId,
   });
@@ -197,6 +215,16 @@ onUnmounted(() => window.removeEventListener("keydown", onKeydown));
           <Button
             variant="ghost"
             size="icon"
+            class="h-7 w-7"
+            title="端口转发"
+            :disabled="!canOpenForward"
+            @click="openForward"
+          >
+            <Waypoints :size="14" />
+          </Button>
+          <Button
+            variant="ghost"
+            size="icon"
             class="ml-auto h-7 w-7"
             title="打开 SFTP 文件管理"
             :disabled="!canOpenSftp"
@@ -225,6 +253,12 @@ onUnmounted(() => window.removeEventListener("keydown", onKeydown));
             />
             <SftpPane
               v-else-if="tab.kind === 'sftp'"
+              v-show="tab.id === store.activeId"
+              :tab="tab"
+              :active="tab.id === store.activeId"
+            />
+            <ForwardPane
+              v-else-if="tab.kind === 'forward'"
               v-show="tab.id === store.activeId"
               :tab="tab"
               :active="tab.id === store.activeId"

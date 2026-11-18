@@ -4,6 +4,7 @@ use sqlx::SqlitePool;
 use std::path::PathBuf;
 use tauri::State;
 
+use crate::forward::ForwardManager;
 use crate::session::SessionManager;
 use crate::sftp::SftpManager;
 use crate::terminal::TerminalManager;
@@ -15,6 +16,7 @@ pub struct AppState {
     pub sessions: SessionManager,
     pub terminals: TerminalManager,
     pub sftp: SftpManager,
+    pub forwards: ForwardManager,
 }
 
 #[derive(Serialize)]

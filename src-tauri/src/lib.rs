@@ -1,12 +1,19 @@
 mod commands;
 mod db;
+mod forward;
 mod keys;
 mod session;
 mod sftp;
 mod terminal;
 
+use std::sync::Arc;
+
 use commands::{
     app_health, host_delete, host_list, host_save, known_host_delete, known_host_list, AppState,
+};
+use forward::{
+    forward_delete, forward_list, forward_save, forward_start, forward_stats, forward_stop,
+    ForwardManager, ForwardRegistry,
 };
 use keys::{key_delete, key_import, key_list};
 use session::SessionManager;
@@ -39,10 +46,12 @@ pub fn run() {
             let handle = app.handle().clone();
             let (pool, db_path) = tauri::async_runtime::block_on(db::init(&handle))
                 .map_err(|e| e.to_string())?;
+            let forwards = Arc::new(ForwardRegistry::default());
             app.manage(AppState {
-                sessions: SessionManager::new(pool.clone()),
+                sessions: SessionManager::new(pool.clone(), forwards.clone()),
                 terminals: TerminalManager::default(),
                 sftp: SftpManager::default(),
+                forwards: ForwardManager::new(forwards),
                 db: pool,
                 db_path,
             });
@@ -73,7 +82,13 @@ pub fn run() {
             sftp_upload,
             sftp_cancel,
             local_home,
-            local_list
+            local_list,
+            forward_list,
+            forward_save,
+            forward_delete,
+            forward_start,
+            forward_stop,
+            forward_stats
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
