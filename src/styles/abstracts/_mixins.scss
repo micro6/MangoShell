@@ -1,0 +1,45 @@
+/// 统一滚动条外观，颜色取自 CSS 变量以便跟随主题
+@mixin scrollbar($size: 8px) {
+  &::-webkit-scrollbar {
+    width: $size;
+    height: $size;
+  }
+
+  &::-webkit-scrollbar-thumb {
+    background: var(--border);
+    border-radius: $size;
+
+    &:hover {
+      background: var(--muted-foreground);
+    }
+  }
+
+  &::-webkit-scrollbar-track {
+    background: transparent;
+  }
+
+  scrollbar-width: thin;
+}
+
+/// 单行文本省略
+@mixin ellipsis {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/// 中间省略：配合 <span data-mid-ellipsis> 使用，尾部更具区分度
+@mixin mid-ellipsis {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  direction: rtl;
+  text-align: left;
+}
+
+/// 终端网格：标题与终端区域对齐所需的等宽字体环境
+@mixin mono {
+  font-family: $term-font-stack;
+  font-variant-ligatures: none;
+}

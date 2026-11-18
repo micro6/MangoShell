@@ -1,0 +1,12 @@
+// 构建期常量：不随主题变化，因此可以安全地放在 Sass 变量里
+$z-terminal: 10;
+$z-statusbar: 20;
+$z-overlay: 1000;
+$z-toast: 1100;
+
+$term-font-stack: "JetBrains Mono", "Cascadia Code", ui-monospace, monospace;
+
+$sidebar-width: 260px;
+$tabbar-height: 36px;
+$statusbar-height: 24px;
+$row-height: 28px;
