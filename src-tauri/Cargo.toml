@@ -44,3 +44,8 @@ lto = true
 opt-level = 3
 panic = "abort"
 strip = true
+
+# rustc 1.97 下 release 关闭 debug assertions 会让 proc-macro 编出损坏的 serde derive
+# （keyboard-types 报 "expected identifier"），此处仅为构建脚本与过程宏开启
+[profile.release.build-override]
+debug-assertions = true

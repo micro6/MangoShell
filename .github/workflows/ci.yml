@@ -11,7 +11,7 @@ concurrency:
 
 jobs:
   web:
-    name: web (typecheck + build)
+    name: web (lint + typecheck + build)
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -23,13 +23,9 @@ jobs:
           node-version: 24
           cache: pnpm
       - run: pnpm install --frozen-lockfile
-      - run: pnpm typecheck
+      - run: pnpm lint
+      # vp check 的 tsgo 不解析 .vue SFC，类型检查仍由 vue-tsc 负责（已包含在 build 中）
       - run: pnpm build
-      # 待 Vite+ 正式纳入 CI 后，用下面这一步替换上面 4 步（需 pin 精确版本，勿用 v1 标签）：
-      #   - uses: voidzero-dev/setup-vp@<exact-version>
-      #     with: { node-version: '24', cache: true }
-      #   - run: vp check
-      #   - run: vp build
 
   rust:
     name: rust (cargo check)

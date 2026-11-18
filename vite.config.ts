@@ -1,4 +1,4 @@
-import { defineConfig } from "vite";
+import { defineConfig, lazyPlugins } from "vite-plus";
 import vue from "@vitejs/plugin-vue";
 import tailwindcss from "@tailwindcss/vite";
 import { fileURLToPath, URL } from "node:url";
@@ -8,7 +8,7 @@ const host = process.env.TAURI_DEV_HOST;
 
 // https://vite.dev/config/
 export default defineConfig(() => ({
-  plugins: [vue(), tailwindcss()],
+  plugins: lazyPlugins(() => [vue(), tailwindcss()]),
 
   resolve: {
     // 别名必须与 tsconfig paths 保持一致
@@ -28,6 +28,12 @@ export default defineConfig(() => ({
         additionalData: `@use "@/styles/abstracts" as *;`,
       },
     },
+  },
+
+  // Oxlint 默认不启用 Vue 插件；plugins 为覆盖式配置，需显式保留默认三项
+  // 模板规则覆盖有限，.vue 的类型检查仍交给 vue-tsc
+  lint: {
+    plugins: ["unicorn", "typescript", "oxc", "vue"],
   },
 
   // Vite options tailored for Tauri development and only applied in `tauri dev` or `tauri build`

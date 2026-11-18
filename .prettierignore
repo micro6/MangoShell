@@ -1,0 +1,2 @@
+# Rust 后端交给 rustfmt，不纳入 vp fmt / vp check 的格式化范围
+src-tauri/
