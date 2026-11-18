@@ -7,6 +7,7 @@ import {
   File,
   Folder,
   FolderPlus,
+  LoaderCircle,
   Pencil,
   RefreshCw,
   Shield,
@@ -318,7 +319,7 @@ onUnmounted(() => document.removeEventListener("click", closeMenu));
     </div>
 
     <div class="table-wrap">
-      <table class="table">
+      <table v-show="!loading" class="table">
         <thead>
           <tr>
             <th>名称</th>
@@ -350,9 +351,12 @@ onUnmounted(() => document.removeEventListener("click", closeMenu));
         </tbody>
       </table>
 
-      <p v-if="loading" class="hint">加载中…</p>
-      <p v-else-if="error" class="hint hint--error">{{ error }}</p>
-      <p v-else-if="!rows.length" class="hint">空目录</p>
+      <div v-if="loading" class="state">
+        <LoaderCircle :size="14" class="spin" />
+        <span>加载中…</span>
+      </div>
+      <div v-else-if="error" class="state state--error">{{ error }}</div>
+      <div v-else-if="!rows.length" class="state">空目录</div>
     </div>
 
     <div
@@ -460,11 +464,14 @@ onUnmounted(() => document.removeEventListener("click", closeMenu));
 .table-wrap {
   flex: 1;
   min-height: 0;
+  display: flex;
+  flex-direction: column;
   overflow: auto;
   @include scrollbar(8px);
 }
 
 .table {
+  flex: none;
   width: 100%;
   border-collapse: collapse;
   table-layout: fixed;
@@ -545,13 +552,31 @@ onUnmounted(() => document.removeEventListener("click", closeMenu));
   font-family: var(--font-mono, monospace);
 }
 
-.hint {
-  padding: 12px;
+// 加载 / 空目录 / 错误统一居中展示，避免提示掉在表格底部
+.state {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 16px 12px;
   font-size: 12px;
   color: var(--muted-foreground);
 
   &--error {
     color: var(--destructive);
+    text-align: center;
+    word-break: break-word;
+  }
+}
+
+.spin {
+  animation: spin 0.9s linear infinite;
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
   }
 }
 
