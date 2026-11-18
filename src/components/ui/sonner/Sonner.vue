@@ -1,5 +1,5 @@
 <script lang="ts" setup>
-import type { ToasterProps } from 'vue-sonner'
+import type { ToasterProps } from "vue-sonner";
 
 import {
   CircleCheckIcon,
@@ -8,13 +8,13 @@ import {
   OctagonXIcon,
   TriangleAlertIcon,
   XIcon,
-} from '@lucide/vue'
-import { reactiveOmit } from '@vueuse/core'
-import { cn } from 'cn'
-import { Toaster as Sonner } from 'vue-sonner'
+} from "@lucide/vue";
+import { reactiveOmit } from "@vueuse/core";
+import { cn } from "cn";
+import { Toaster as Sonner } from "vue-sonner";
 
-const props = defineProps<ToasterProps>()
-const delegatedProps = reactiveOmit(props, 'class', 'toastOptions')
+const props = defineProps<ToasterProps>();
+const delegatedProps = reactiveOmit(props, "class", "toastOptions");
 </script>
 
 <template>
@@ -31,12 +31,14 @@ const delegatedProps = reactiveOmit(props, 'class', 'toastOptions')
       '--gray5': 'var(--border)',
       '--gray12': 'var(--popover-foreground)',
     }"
-    :toast-options="props.toastOptions ?? {
-      classes: {
-        // 桌面端收敛圆角，避免 16px 的网页感
-        toast: 'rounded-md',
-      },
-    }"
+    :toast-options="
+      props.toastOptions ?? {
+        classes: {
+          // 桌面端收敛圆角，避免 16px 的网页感
+          toast: 'rounded-md',
+        },
+      }
+    "
     v-bind="delegatedProps"
   >
     <template #success-icon>

@@ -78,7 +78,11 @@ async function remove(item: KnownHostRecord) {
           <p>还没有已知主机，连接成功后会自动记录</p>
         </div>
         <template v-else>
-          <div v-for="item in items" :key="`${item.host}:${item.port}:${item.keyType}`" class="item">
+          <div
+            v-for="item in items"
+            :key="`${item.host}:${item.port}:${item.keyType}`"
+            class="item"
+          >
             <div class="item-main">
               <div class="item-title">
                 <span class="addr">{{ item.host }}:{{ item.port }}</span>

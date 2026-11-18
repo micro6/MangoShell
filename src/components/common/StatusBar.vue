@@ -25,7 +25,9 @@ onMounted(async () => {
   <footer class="statusbar">
     <span v-if="health" class="item">
       <span class="dot" />
-      就绪 · v{{ health.version }} · 主机 {{ health.hostCount }} 台 · schema v{{ health.schemaVersion }}
+      就绪 · v{{ health.version }} · 主机 {{ health.hostCount }} 台 · schema v{{
+        health.schemaVersion
+      }}
     </span>
     <span v-else-if="error" class="item item--error">后端未就绪：{{ error }}</span>
     <span v-else class="item">初始化中…</span>

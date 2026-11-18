@@ -359,31 +359,60 @@ onUnmounted(() => document.removeEventListener("click", closeMenu));
       <div v-else-if="!rows.length" class="state">空目录</div>
     </div>
 
-    <div
-      v-if="menu"
-      class="menu"
-      :style="{ left: `${menu.x}px`, top: `${menu.y}px` }"
-      @click.stop
-    >
+    <div v-if="menu" class="menu" :style="{ left: `${menu.x}px`, top: `${menu.y}px` }" @click.stop>
       <button
         v-if="!menu.row.isDir"
         type="button"
         class="menu-item"
-        @click="isRemote ? emit('download', [menu!.row]) : emit('upload', [menu!.row]); closeMenu()"
+        @click="
+          isRemote ? emit('download', [menu!.row]) : emit('upload', [menu!.row]);
+          closeMenu();
+        "
       >
         <component :is="isRemote ? Download : Upload" :size="12" />
         {{ isRemote ? "下载" : "上传" }}
       </button>
-      <button v-if="isRemote" type="button" class="menu-item" @click="openPrompt('rename', menu!.row); closeMenu()">
+      <button
+        v-if="isRemote"
+        type="button"
+        class="menu-item"
+        @click="
+          openPrompt('rename', menu!.row);
+          closeMenu();
+        "
+      >
         <Pencil :size="12" />重命名
       </button>
-      <button v-if="isRemote" type="button" class="menu-item" @click="openPermission(menu!.row); closeMenu()">
+      <button
+        v-if="isRemote"
+        type="button"
+        class="menu-item"
+        @click="
+          openPermission(menu!.row);
+          closeMenu();
+        "
+      >
         <Shield :size="12" />权限
       </button>
-      <button v-if="isRemote" type="button" class="menu-item" @click="askDelete([menu!.row]); closeMenu()">
+      <button
+        v-if="isRemote"
+        type="button"
+        class="menu-item"
+        @click="
+          askDelete([menu!.row]);
+          closeMenu();
+        "
+      >
         <Trash2 :size="12" />删除
       </button>
-      <button type="button" class="menu-item" @click="refresh(); closeMenu()">
+      <button
+        type="button"
+        class="menu-item"
+        @click="
+          refresh();
+          closeMenu();
+        "
+      >
         <RefreshCw :size="12" />刷新
       </button>
     </div>
@@ -391,7 +420,9 @@ onUnmounted(() => document.removeEventListener("click", closeMenu));
     <Dialog :open="prompt.open" @update:open="(value) => (prompt.open = value)">
       <DialogContent class="max-w-[320px]">
         <DialogHeader>
-          <DialogTitle class="text-[14px]">{{ prompt.mode === "mkdir" ? "新建目录" : "重命名" }}</DialogTitle>
+          <DialogTitle class="text-[14px]">{{
+            prompt.mode === "mkdir" ? "新建目录" : "重命名"
+          }}</DialogTitle>
         </DialogHeader>
         <form class="prompt-body" @submit.prevent="submitPrompt">
           <Input v-model="prompt.value" class="h-8 text-[12px]" autofocus />
@@ -426,7 +457,9 @@ onUnmounted(() => document.removeEventListener("click", closeMenu));
         <AlertDialogHeader>
           <AlertDialogTitle class="text-[14px]">删除确认</AlertDialogTitle>
           <AlertDialogDescription class="text-[12px]">
-            确定删除{{ deleteTargets[0]?.isDir ? "目录" : "文件" }}「{{ deleteTargets[0]?.name }}」吗？目录必须为空。
+            确定删除{{ deleteTargets[0]?.isDir ? "目录" : "文件" }}「{{
+              deleteTargets[0]?.name
+            }}」吗？目录必须为空。
           </AlertDialogDescription>
         </AlertDialogHeader>
         <AlertDialogFooter>

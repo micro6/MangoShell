@@ -5,14 +5,14 @@
 
 ## 1. 范围
 
-| 能力 | 说明 |
-|---|---|
-| 双栏 | 左侧本地目录、右侧远端目录，可拖拽分隔条调整宽度 |
-| 浏览 | 双击目录进入、上一级、路径栏直填回车跳转、刷新；显示名称/大小/修改时间/权限 |
-| 上传下载 | 多选后按钮或双击触发；远端文件下载到本地当前目录，本地文件上传到远端当前目录 |
-| 队列 | 单一并发（串行），逐条显示进度/速度/状态，支持取消、失败重试、清理已完成 |
-| 续传 | 断点续传自动生效：本地已存在且短于远端则从本地长度续传下载；远端已存在且短于本地则从远端长度续传上传 |
-| 权限 | 远端文件/目录 chmod（八进制 3~4 位），删除、重命名、新建目录 |
+| 能力     | 说明                                                                                                 |
+| -------- | ---------------------------------------------------------------------------------------------------- |
+| 双栏     | 左侧本地目录、右侧远端目录，可拖拽分隔条调整宽度                                                     |
+| 浏览     | 双击目录进入、上一级、路径栏直填回车跳转、刷新；显示名称/大小/修改时间/权限                          |
+| 上传下载 | 多选后按钮或双击触发；远端文件下载到本地当前目录，本地文件上传到远端当前目录                         |
+| 队列     | 单一并发（串行），逐条显示进度/速度/状态，支持取消、失败重试、清理已完成                             |
+| 续传     | 断点续传自动生效：本地已存在且短于远端则从本地长度续传下载；远端已存在且短于本地则从远端长度续传上传 |
+| 权限     | 远端文件/目录 chmod（八进制 3~4 位），删除、重命名、新建目录                                         |
 
 不做：目录递归传输、远端到远端复制、拖拽上传下载、本地重命名/删除、断点校验（哈希）。
 
@@ -37,19 +37,19 @@ pub struct SftpManager {
 
 命令（全部注册进 `lib.rs`，在 `AppState` 增加 `sftp: SftpManager`）：
 
-| 命令 | 签名要点 | 行为 |
-|---|---|---|
-| `sftp_open` | `tab_id, host_id, password?: String` | 建会话，返回 `{ home: String }`（`canonicalize(".")`） |
-| `sftp_close` | `tab_id` | 关闭会话并移除；2 s 超时兜底 |
-| `sftp_list` | `tab_id, path` | 返回 `Vec<SftpEntry>`；符号链接标记 `isSymlink`，能解析出目标目录则 `isDir=true` |
-| `sftp_mkdir` | `tab_id, path` | `create_dir` |
-| `sftp_rename` | `tab_id, from, to` | `rename` |
-| `sftp_delete` | `tab_id, path, isDir` | 文件 `remove_file`；目录 `remove_dir`（非空报错，提示先清空） |
-| `sftp_chmod` | `tab_id, path, mode: u32` | `set_metadata` 仅设 `permissions = Some(mode & 0o7777)` |
-| `sftp_download` | `tab_id, transfer_id, remote, local, on_progress: Channel<TransferProgress>` | 256 KiB 分块读远端写本地；进度节流 150 ms |
-| `sftp_upload` | 同上方向相反 | 256 KiB 分块读本地写远端 |
-| `sftp_cancel` | `transfer_id` | 置取消标志，传输循环下一块退出并返回「已取消」 |
-| `local_home` / `local_list` | `path?: String` | 本地目录浏览（`USERPROFILE` / `HOME`），返回 `{ path, parent, entries }` |
+| 命令                        | 签名要点                                                                     | 行为                                                                             |
+| --------------------------- | ---------------------------------------------------------------------------- | -------------------------------------------------------------------------------- |
+| `sftp_open`                 | `tab_id, host_id, password?: String`                                         | 建会话，返回 `{ home: String }`（`canonicalize(".")`）                           |
+| `sftp_close`                | `tab_id`                                                                     | 关闭会话并移除；2 s 超时兜底                                                     |
+| `sftp_list`                 | `tab_id, path`                                                               | 返回 `Vec<SftpEntry>`；符号链接标记 `isSymlink`，能解析出目标目录则 `isDir=true` |
+| `sftp_mkdir`                | `tab_id, path`                                                               | `create_dir`                                                                     |
+| `sftp_rename`               | `tab_id, from, to`                                                           | `rename`                                                                         |
+| `sftp_delete`               | `tab_id, path, isDir`                                                        | 文件 `remove_file`；目录 `remove_dir`（非空报错，提示先清空）                    |
+| `sftp_chmod`                | `tab_id, path, mode: u32`                                                    | `set_metadata` 仅设 `permissions = Some(mode & 0o7777)`                          |
+| `sftp_download`             | `tab_id, transfer_id, remote, local, on_progress: Channel<TransferProgress>` | 256 KiB 分块读远端写本地；进度节流 150 ms                                        |
+| `sftp_upload`               | 同上方向相反                                                                 | 256 KiB 分块读本地写远端                                                         |
+| `sftp_cancel`               | `transfer_id`                                                                | 置取消标志，传输循环下一块退出并返回「已取消」                                   |
+| `local_home` / `local_list` | `path?: String`                                                              | 本地目录浏览（`USERPROFILE` / `HOME`），返回 `{ path, parent, entries }`         |
 
 `SftpEntry`（camelCase 序列化）：`name, path, isDir, isSymlink, size: u64, mode: u32, mtime: i64`。
 `TransferProgress`：`{ transferred: u64, total: u64 }`。

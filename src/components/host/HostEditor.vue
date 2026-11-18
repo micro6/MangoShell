@@ -105,23 +105,45 @@ async function submit() {
       <form class="form" @submit.prevent="submit">
         <div class="field">
           <Label for="he-alias" class="text-[12px]">别名（可选）</Label>
-          <Input id="he-alias" v-model="form.alias" class="h-8 text-[12px]" placeholder="例如：测试机" />
+          <Input
+            id="he-alias"
+            v-model="form.alias"
+            class="h-8 text-[12px]"
+            placeholder="例如：测试机"
+          />
         </div>
 
         <div class="row">
           <div class="field field--grow">
             <Label for="he-host" class="text-[12px]">主机</Label>
-            <Input id="he-host" v-model="form.host" class="h-8 text-[12px]" placeholder="192.168.1.10" />
+            <Input
+              id="he-host"
+              v-model="form.host"
+              class="h-8 text-[12px]"
+              placeholder="192.168.1.10"
+            />
           </div>
           <div class="field field--port">
             <Label for="he-port" class="text-[12px]">端口</Label>
-            <Input id="he-port" v-model="form.port" type="number" min="1" max="65535" class="h-8 text-[12px]" />
+            <Input
+              id="he-port"
+              v-model="form.port"
+              type="number"
+              min="1"
+              max="65535"
+              class="h-8 text-[12px]"
+            />
           </div>
         </div>
 
         <div class="field">
           <Label for="he-username" class="text-[12px]">用户名</Label>
-          <Input id="he-username" v-model="form.username" class="h-8 text-[12px]" placeholder="root" />
+          <Input
+            id="he-username"
+            v-model="form.username"
+            class="h-8 text-[12px]"
+            placeholder="root"
+          />
         </div>
 
         <div class="field">

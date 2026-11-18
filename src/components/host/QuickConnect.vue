@@ -104,23 +104,45 @@ function submit() {
         <template v-if="!connectMode">
           <div class="field">
             <Label for="qc-alias" class="text-[12px]">别名（可选）</Label>
-            <Input id="qc-alias" v-model="form.alias" class="h-8 text-[12px]" placeholder="例如：测试机" />
+            <Input
+              id="qc-alias"
+              v-model="form.alias"
+              class="h-8 text-[12px]"
+              placeholder="例如：测试机"
+            />
           </div>
 
           <div class="row">
             <div class="field field--grow">
               <Label for="qc-host" class="text-[12px]">主机</Label>
-              <Input id="qc-host" v-model="form.host" class="h-8 text-[12px]" placeholder="192.168.1.10" />
+              <Input
+                id="qc-host"
+                v-model="form.host"
+                class="h-8 text-[12px]"
+                placeholder="192.168.1.10"
+              />
             </div>
             <div class="field field--port">
               <Label for="qc-port" class="text-[12px]">端口</Label>
-              <Input id="qc-port" v-model="form.port" type="number" min="1" max="65535" class="h-8 text-[12px]" />
+              <Input
+                id="qc-port"
+                v-model="form.port"
+                type="number"
+                min="1"
+                max="65535"
+                class="h-8 text-[12px]"
+              />
             </div>
           </div>
 
           <div class="field">
             <Label for="qc-username" class="text-[12px]">用户名</Label>
-            <Input id="qc-username" v-model="form.username" class="h-8 text-[12px]" placeholder="root" />
+            <Input
+              id="qc-username"
+              v-model="form.username"
+              class="h-8 text-[12px]"
+              placeholder="root"
+            />
           </div>
         </template>
 

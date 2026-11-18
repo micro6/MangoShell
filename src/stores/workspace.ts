@@ -25,11 +25,17 @@ export const useWorkspaceStore = defineStore("workspace", () => {
   function openTab(tab: Omit<WorkspaceTab, "id">) {
     // 同一主机的同类标签已存在则直接激活，避免重复
     const exist = tabs.value.find((t) =>
-      tab.hostId ? t.hostId === tab.hostId && t.kind === tab.kind : t.title === tab.title && t.kind === tab.kind,
+      tab.hostId
+        ? t.hostId === tab.hostId && t.kind === tab.kind
+        : t.title === tab.title && t.kind === tab.kind,
     );
     if (exist) {
       // 只有正常的标签才复用；failed / lost 说明连接已断，必须重建才能重连
-      if (exist.state === "connected" || exist.state === "connecting" || exist.state === "authenticating") {
+      if (
+        exist.state === "connected" ||
+        exist.state === "connecting" ||
+        exist.state === "authenticating"
+      ) {
         activeId.value = exist.id;
         return exist;
       }
@@ -63,5 +69,14 @@ export const useWorkspaceStore = defineStore("workspace", () => {
     sidebarCollapsed.value = !sidebarCollapsed.value;
   }
 
-  return { tabs, activeId, sidebarCollapsed, openTab, closeTab, setTabState, activate, toggleSidebar };
+  return {
+    tabs,
+    activeId,
+    sidebarCollapsed,
+    openTab,
+    closeTab,
+    setTabState,
+    activate,
+    toggleSidebar,
+  };
 });

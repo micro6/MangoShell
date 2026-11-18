@@ -5,14 +5,14 @@
 
 ## 1. 范围
 
-| 能力 | 说明 |
-|---|---|
+| 能力      | 说明                                                                                           |
+| --------- | ---------------------------------------------------------------------------------------------- |
 | 本地 `-L` | `bind_host:bind_port` 监听，每条入站连接开 `direct-tcpip` 通道桥接到 `target_host:target_port` |
-| 动态 `-D` | 本地 SOCKS5（no-auth，仅 CONNECT，支持 IPv4 / 域名 / IPv6），每条连接按目标开 `direct-tcpip` |
-| 远程 `-R` | 请求服务器监听 `bind_host:bind_port`，服务器回推通道后桥接到本地 `target_host:target_port` |
-| 规则管理 | 新建 / 编辑 / 删除 / 启动 / 停止，落库持久化 |
-| 流量统计 | 运行中规则实时显示入/出字节，1 s 推送一次 |
-| 降级提示 | `-R` 被服务器拒绝时给出明确原因（`tcpip-forward` denied / 端口占用等） |
+| 动态 `-D` | 本地 SOCKS5（no-auth，仅 CONNECT，支持 IPv4 / 域名 / IPv6），每条连接按目标开 `direct-tcpip`   |
+| 远程 `-R` | 请求服务器监听 `bind_host:bind_port`，服务器回推通道后桥接到本地 `target_host:target_port`     |
+| 规则管理  | 新建 / 编辑 / 删除 / 启动 / 停止，落库持久化                                                   |
+| 流量统计  | 运行中规则实时显示入/出字节，1 s 推送一次                                                      |
+| 降级提示  | `-R` 被服务器拒绝时给出明确原因（`tcpip-forward` denied / 端口占用等）                         |
 
 不做：UDP 转发、SOCKS5 认证、多跳链式转发、规则自动拉起（`autoStart` 仅落库，M4 不自动触发）、调用系统 `ssh.exe` 兜底、断线自动重连。
 
@@ -60,14 +60,14 @@ pub struct ForwardManager {
 
 命令（注册进 `lib.rs`，`AppState` 增加 `forwards: Arc<ForwardManager>`）：
 
-| 命令 | 签名要点 | 行为 |
-|---|---|---|
-| `forward_list` | `host_id?: String` | 返回 `Vec<ForwardRuleView>`：规则字段 + `status`（`stopped`/`running`/`error`）+ `bytesIn`/`bytesOut` + `error?` |
-| `forward_save` | `id?, host_id, type, bind_host, bind_port, target_host?, target_port?, auto_start` | 校验：端口 1–65535；`local`/`remote` 必须有 target；类型枚举校验；id 为空新增，否则更新（运行中禁止改名/改端口，需先停止） |
-| `forward_delete` | `id` | 先停止再删库 |
-| `forward_start` | `id` | 按类型启动；失败返回明确错误（含地址、端口、原因） |
-| `forward_stop` | `id` | 停监听 + 关闭活跃通道；`-R` 额外 `cancel_tcpip_forward` |
-| `forward_stats` | `on_stats: Channel<Vec<ForwardStat>>` | 每 1 s 推送全部运行中规则的 `{ id, bytesIn, bytesOut }`；前端丢弃 Channel 后任务自动退出 |
+| 命令             | 签名要点                                                                           | 行为                                                                                                                       |
+| ---------------- | ---------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------- |
+| `forward_list`   | `host_id?: String`                                                                 | 返回 `Vec<ForwardRuleView>`：规则字段 + `status`（`stopped`/`running`/`error`）+ `bytesIn`/`bytesOut` + `error?`           |
+| `forward_save`   | `id?, host_id, type, bind_host, bind_port, target_host?, target_port?, auto_start` | 校验：端口 1–65535；`local`/`remote` 必须有 target；类型枚举校验；id 为空新增，否则更新（运行中禁止改名/改端口，需先停止） |
+| `forward_delete` | `id`                                                                               | 先停止再删库                                                                                                               |
+| `forward_start`  | `id`                                                                               | 按类型启动；失败返回明确错误（含地址、端口、原因）                                                                         |
+| `forward_stop`   | `id`                                                                               | 停监听 + 关闭活跃通道；`-R` 额外 `cancel_tcpip_forward`                                                                    |
+| `forward_stats`  | `on_stats: Channel<Vec<ForwardStat>>`                                              | 每 1 s 推送全部运行中规则的 `{ id, bytesIn, bytesOut }`；前端丢弃 Channel 后任务自动退出                                   |
 
 ### 2.3 三种转发实现
 

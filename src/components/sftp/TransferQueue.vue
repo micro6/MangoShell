@@ -1,14 +1,6 @@
 <script setup lang="ts">
 import { computed, ref } from "vue";
-import {
-  ArrowDown,
-  ArrowUp,
-  ChevronDown,
-  ChevronUp,
-  RotateCw,
-  Trash2,
-  X,
-} from "@lucide/vue";
+import { ArrowDown, ArrowUp, ChevronDown, ChevronUp, RotateCw, Trash2, X } from "@lucide/vue";
 import { Button } from "@/components/ui/button";
 import { formatBytes, useTransfersStore, type TransferItem } from "@/stores/transfers";
 
@@ -63,10 +55,15 @@ const statusText: Record<TransferItem["status"], string> = {
         />
         <div class="main">
           <div class="line">
-            <span class="name" :title="item.direction === 'upload' ? item.localPath : item.remotePath">
+            <span
+              class="name"
+              :title="item.direction === 'upload' ? item.localPath : item.remotePath"
+            >
               {{ item.name }}
             </span>
-            <span v-if="item.overwrite" class="badge" title="本地同名文件更长，将截断重写">覆盖</span>
+            <span v-if="item.overwrite" class="badge" title="本地同名文件更长，将截断重写"
+              >覆盖</span
+            >
             <span class="meta">
               {{ formatBytes(item.transferred) }} / {{ formatBytes(item.size) }}
               <template v-if="item.status === 'running' && item.speed > 0">

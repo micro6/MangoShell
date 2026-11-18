@@ -232,13 +232,7 @@ onUnmounted(() => window.removeEventListener("keydown", onKeydown));
           >
             <FolderOpen :size="14" />
           </Button>
-          <Button
-            variant="ghost"
-            size="icon"
-            class="h-7 w-7"
-            title="快速连接"
-            @click="openCreate"
-          >
+          <Button variant="ghost" size="icon" class="h-7 w-7" title="快速连接" @click="openCreate">
             <Plug :size="14" />
           </Button>
         </div>
@@ -302,7 +296,9 @@ onUnmounted(() => window.removeEventListener("keydown", onKeydown));
         </AlertDialogHeader>
         <AlertDialogFooter>
           <AlertDialogCancel class="h-8 text-[12px]">取消</AlertDialogCancel>
-          <AlertDialogAction class="h-8 text-[12px]" @click="confirmDeleteHost">删除</AlertDialogAction>
+          <AlertDialogAction class="h-8 text-[12px]" @click="confirmDeleteHost"
+            >删除</AlertDialogAction
+          >
         </AlertDialogFooter>
       </AlertDialogContent>
     </AlertDialog>

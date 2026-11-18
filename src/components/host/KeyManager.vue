@@ -131,7 +131,12 @@ async function confirmDelete() {
         </div>
         <div class="field">
           <Label for="km-name" class="text-[12px]">名称</Label>
-          <Input id="km-name" v-model="name" class="h-8 text-[12px]" placeholder="例如：id_ed25519" />
+          <Input
+            id="km-name"
+            v-model="name"
+            class="h-8 text-[12px]"
+            placeholder="例如：id_ed25519"
+          />
         </div>
         <div class="field">
           <Label for="km-pass" class="text-[12px]">口令（私钥未加密可留空）</Label>
@@ -148,7 +153,9 @@ async function confirmDelete() {
           <Button size="sm" class="h-7 text-[12px]" :disabled="busy" @click="doImport">
             {{ busy ? "导入中…" : "导入" }}
           </Button>
-          <Button size="sm" variant="ghost" class="h-7 text-[12px]" @click="resetImport">取消</Button>
+          <Button size="sm" variant="ghost" class="h-7 text-[12px]" @click="resetImport"
+            >取消</Button
+          >
         </div>
       </div>
 

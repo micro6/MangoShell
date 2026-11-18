@@ -14,13 +14,13 @@
 
 ### 1.2 本期范围
 
-| 能力 | 说明 | 优先级 |
-|---|---|---|
-| SSH 终端 | 多标签、多窗口、断线重连、搜索、日志录制 | P0 |
-| 会话/密钥管理 | 分组树、密码/密钥/Agent 认证、known_hosts 校验、导入 `~/.ssh/config` | P0 |
-| SFTP | 双栏浏览、上传下载、断点续传、改权限、拖拽 | P1 |
-| 端口转发 | 本地 `-L`、远程 `-R`、动态 SOCKS5 `-D`，可视化隧道管理 | P1 |
-| 批量运维 | 多主机并发执行、命令片段库、结果汇总导出 | P2 |
+| 能力          | 说明                                                                 | 优先级 |
+| ------------- | -------------------------------------------------------------------- | ------ |
+| SSH 终端      | 多标签、多窗口、断线重连、搜索、日志录制                             | P0     |
+| 会话/密钥管理 | 分组树、密码/密钥/Agent 认证、known_hosts 校验、导入 `~/.ssh/config` | P0     |
+| SFTP          | 双栏浏览、上传下载、断点续传、改权限、拖拽                           | P1     |
+| 端口转发      | 本地 `-L`、远程 `-R`、动态 SOCKS5 `-D`，可视化隧道管理               | P1     |
+| 批量运维      | 多主机并发执行、命令片段库、结果汇总导出                             | P2     |
 
 ### 1.3 非目标（本期不做，但架构留口）
 
@@ -96,27 +96,28 @@ sequenceDiagram
 
 ### 3.1 SSH 协议实现（最关键的决策）
 
-| 方案 | 优点 | 缺点 | 结论 |
-|---|---|---|---|
-| **russh**（纯 Rust，基于 tokio） | 无 C 依赖、Windows 交叉编译零痛苦、异步原生、支持 direct-tcpip / tcpip-forward / 多通道 | 部分老算法（`ssh-rsa`、`diffie-hellman-group1-sha1`）需显式开启；API 版本间有变动 | **主选** |
-| ssh2（libssh2 绑定） | 成熟、算法覆盖广 | 依赖 OpenSSL/vcpkg，Windows 构建产物体积与链路复杂；同步 API 需包 `spawn_blocking` | 备选 |
-| 调用系统 `ssh.exe` | 兼容性天花板、零协议开发 | 无法做 SFTP 文件树/隧道可视化、无法精细控制与审计 | **降级兜底**（仅用于极老服务器或 `-R` 异常场景） |
+| 方案                             | 优点                                                                                    | 缺点                                                                               | 结论                                             |
+| -------------------------------- | --------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------- | ------------------------------------------------ |
+| **russh**（纯 Rust，基于 tokio） | 无 C 依赖、Windows 交叉编译零痛苦、异步原生、支持 direct-tcpip / tcpip-forward / 多通道 | 部分老算法（`ssh-rsa`、`diffie-hellman-group1-sha1`）需显式开启；API 版本间有变动  | **主选**                                         |
+| ssh2（libssh2 绑定）             | 成熟、算法覆盖广                                                                        | 依赖 OpenSSL/vcpkg，Windows 构建产物体积与链路复杂；同步 API 需包 `spawn_blocking` | 备选                                             |
+| 调用系统 `ssh.exe`               | 兼容性天花板、零协议开发                                                                | 无法做 SFTP 文件树/隧道可视化、无法精细控制与审计                                  | **降级兜底**（仅用于极老服务器或 `-R` 异常场景） |
 
 配套：
+
 - **SFTP**：`russh-sftp`（协议层）或 `openssh-sftp-client`（高层封装，自带并行读写与进度回调，推荐直接用后者）。
 - **密钥解析**：`ssh-key`（RustCrypto），支持 OpenSSH 私钥、PEM/PKCS#8、加密私钥（bcrypt_pbkdf + AES-GCM / ChaCha20）。
 - **算法兼容性**：在 `russh::client::Config.preferred` 中按"安全优先 + 兼容开关"两套 profile，用户级设置 `legacy_algorithms: bool`。
 
 ### 3.2 前端
 
-| 关注点 | 选型 | 理由 |
-|---|---|---|
-| 框架 | Vue 3.5（`<script setup>` + TS）+ **Vite+**（`vp` CLI，内含 Vite + Rolldown） | 你指定；dev/build/check/test 收敛成一套命令，lint/format 走 Oxc 极快，详见 3.5 |
-| 状态 | Pinia（只放会话树、标签、设置等轻量元数据） | 终端缓冲绝不能进响应式，避免 Proxy 拖慢 |
-| 终端 | `@xterm/xterm` + `addon-fit` / `addon-webgl` / `addon-search` / `addon-web-links` / `addon-serialize` / `addon-unicode11` / `addon-clipboard` | 事实标准；WebGL 渲染在大输出量下比 DOM 快 3~10 倍 |
-| UI 库 | **shadcn-vue**（源码复制式组件，底层 reka-ui + Tailwind） | 组件进仓库可任意改，无第三方主题锁；无运行时"组件库"体积负担，只打包用到的；适合做密排的桌面工具界面。代价：没有现成的 Tree / 虚拟列表，需自研或拼装 |
-| IPC 类型 | `tauri-specta` 生成 TS 类型与调用桩 | Rust 命令与前端类型不会漂移 |
-| 测试 | Vitest（前端纯逻辑）+ Tauri 官方 `tauri-driver` + msedgedriver（E2E） | 关键路径可回归 |
+| 关注点   | 选型                                                                                                                                          | 理由                                                                                                                                                 |
+| -------- | --------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 框架     | Vue 3.5（`<script setup>` + TS）+ **Vite+**（`vp` CLI，内含 Vite + Rolldown）                                                                 | 你指定；dev/build/check/test 收敛成一套命令，lint/format 走 Oxc 极快，详见 3.5                                                                       |
+| 状态     | Pinia（只放会话树、标签、设置等轻量元数据）                                                                                                   | 终端缓冲绝不能进响应式，避免 Proxy 拖慢                                                                                                              |
+| 终端     | `@xterm/xterm` + `addon-fit` / `addon-webgl` / `addon-search` / `addon-web-links` / `addon-serialize` / `addon-unicode11` / `addon-clipboard` | 事实标准；WebGL 渲染在大输出量下比 DOM 快 3~10 倍                                                                                                    |
+| UI 库    | **shadcn-vue**（源码复制式组件，底层 reka-ui + Tailwind）                                                                                     | 组件进仓库可任意改，无第三方主题锁；无运行时"组件库"体积负担，只打包用到的；适合做密排的桌面工具界面。代价：没有现成的 Tree / 虚拟列表，需自研或拼装 |
+| IPC 类型 | `tauri-specta` 生成 TS 类型与调用桩                                                                                                           | Rust 命令与前端类型不会漂移                                                                                                                          |
+| 测试     | Vitest（前端纯逻辑）+ Tauri 官方 `tauri-driver` + msedgedriver（E2E）                                                                         | 关键路径可回归                                                                                                                                       |
 
 ### 3.3 其他
 
@@ -156,27 +157,27 @@ npx shadcn-vue@latest add button input label form table dialog sheet alert-dialo
 
 ```ts
 // vite.config.ts
-import path from 'node:path'
-import { defineConfig } from 'vite'
-import vue from '@vitejs/plugin-vue'
-import tailwindcss from '@tailwindcss/vite'
+import path from "node:path";
+import { defineConfig } from "vite";
+import vue from "@vitejs/plugin-vue";
+import tailwindcss from "@tailwindcss/vite";
 
 export default defineConfig({
   plugins: [vue(), tailwindcss()],
-  resolve: { alias: { '@': path.resolve(__dirname, './src') } },
+  resolve: { alias: { "@": path.resolve(__dirname, "./src") } },
   // SCSS：每个 .scss 自动注入变量与 mixin，免去重复 @use（见 3.4.6）
   css: {
     preprocessorOptions: {
       scss: {
-        api: 'modern-compiler',
+        api: "modern-compiler",
         additionalData: `@use "@/styles/abstracts" as *;`,
       },
     },
   },
   // Tauri 约定：固定端口 + 忽略 Rust 源码变更，避免热更新抖动
   clearScreen: false,
-  server: { port: 1420, strictPort: true, watch: { ignored: ['**/src-tauri/**'] } },
-})
+  server: { port: 1420, strictPort: true, watch: { ignored: ["**/src-tauri/**"] } },
+});
 ```
 
 `tsconfig.json` 同步加 `"paths": { "@/*": ["./src/*"] }`，`components.json` 里 `aliases.ui` 指向 `@/components/ui`。
@@ -198,7 +199,7 @@ export default defineConfig({
 }
 
 :root {
-  --radius: 6px;                    /* 桌面端收敛圆角 */
+  --radius: 6px; /* 桌面端收敛圆角 */
   --background: #ffffff;
   --foreground: #0f1115;
   --primary: #2563eb;
@@ -215,19 +216,19 @@ export default defineConfig({
 
 #### 3.4.3 功能 → 组件映射
 
-| 功能 | 采用方案 |
-|---|---|
+| 功能                  | 采用方案                                                                                                                       |
+| --------------------- | ------------------------------------------------------------------------------------------------------------------------------ |
 | 会话树（分组 + 主机） | 自研 `HostTree.vue`（reka-ui 的 Collapse 原语）+ `@tanstack/vue-virtual` 虚拟滚动 + `ContextMenu`（右键：连接/编辑/复制/删除） |
-| 多标签栏 | 自研 tab bar（需中键关闭、拖拽排序、溢出滚动），不用现成 `Tabs`——它的语义是面板切换，不是可关闭文档 |
-| 终端分屏 | `Resizable`（基于 reka-ui Splitter，支持水平/垂直嵌套） |
-| SFTP 双栏 | `Resizable` + `Table` + `DropdownMenu`（右键菜单）+ `Progress` + `Sonner` |
-| 新建/编辑会话 | `Sheet`（侧边抽屉式，比 Dialog 更适合多字段表单）+ `Form`（vee-validate + zod 校验） |
-| 密钥导入向导 | `Dialog` + `Stepper`（自研）+ `Input`（密码框显隐） |
-| 转发管理 | `Table` + `Badge`（running/error 状态色）+ `Switch`（autoStart） |
-| 批量运维工作台 | TanStack Table（`@tanstack/vue-table`）+ 行级 `Badge` + 底部 `Progress` + `AlertDialog` 危险确认 |
-| 快速连接 | `Command`（`Ctrl/Cmd + K`）：搜主机、切标签、跑片段 |
-| 全局通知 | `Sonner`（右上角，区分 success/error，连接断开用持久 toast） |
-| 设置页 | `Tabs` + `Form` + `Switch`/`Select`/`Slider` |
+| 多标签栏              | 自研 tab bar（需中键关闭、拖拽排序、溢出滚动），不用现成 `Tabs`——它的语义是面板切换，不是可关闭文档                            |
+| 终端分屏              | `Resizable`（基于 reka-ui Splitter，支持水平/垂直嵌套）                                                                        |
+| SFTP 双栏             | `Resizable` + `Table` + `DropdownMenu`（右键菜单）+ `Progress` + `Sonner`                                                      |
+| 新建/编辑会话         | `Sheet`（侧边抽屉式，比 Dialog 更适合多字段表单）+ `Form`（vee-validate + zod 校验）                                           |
+| 密钥导入向导          | `Dialog` + `Stepper`（自研）+ `Input`（密码框显隐）                                                                            |
+| 转发管理              | `Table` + `Badge`（running/error 状态色）+ `Switch`（autoStart）                                                               |
+| 批量运维工作台        | TanStack Table（`@tanstack/vue-table`）+ 行级 `Badge` + 底部 `Progress` + `AlertDialog` 危险确认                               |
+| 快速连接              | `Command`（`Ctrl/Cmd + K`）：搜主机、切标签、跑片段                                                                            |
+| 全局通知              | `Sonner`（右上角，区分 success/error，连接断开用持久 toast）                                                                   |
+| 设置页                | `Tabs` + `Form` + `Switch`/`Select`/`Slider`                                                                                   |
 
 > 注意：shadcn-vue **没有 Tree 组件**，会话树是唯一需要认真自研的 UI 部件（约 300~400 行，含拖拽排序时再加 200 行）。
 
@@ -244,13 +245,13 @@ export default defineConfig({
 
 #### 3.4.5 Tauri 环境特有坑
 
-| 坑 | 表现 | 处理 |
-|---|---|---|
+| 坑                                         | 表现                                             | 处理                                                                                          |
+| ------------------------------------------ | ------------------------------------------------ | --------------------------------------------------------------------------------------------- |
 | Tailwind v4 使用 `oklch()` / `color-mix()` | Linux WebKitGTK 老版本不识别，颜色整体丢失或发灰 | 在 `@theme inline` 里提供 rgb 变量兜底，或设置 `@supports` 降级；发版前在 Ubuntu 22.04 上实测 |
-| `backdrop-filter` 模糊 | Windows WebView2 正常，macOS/Linux 表现不一 | 浮层不用毛玻璃，改用纯色 + 阴影 |
-| 浮层被裁切 | 终端容器 `overflow: hidden` 导致 Dropdown 被裁 | reka-ui 的 `Teleport` 默认已处理；自定义浮层务必走 `Portal` |
-| HMR 下组件状态丢失 | 改样式后终端实例被重建 | 终端实例在 `TerminalManager` 中按 `tabId` 持有，与组件生命周期解耦（见附录 B.2） |
-| Tailwind 扫描不到动态类名 | 状态色如 `bg-${color}-500` 不生成 | 用 `cva` 显式枚举变体，禁止字符串拼接类名 |
+| `backdrop-filter` 模糊                     | Windows WebView2 正常，macOS/Linux 表现不一      | 浮层不用毛玻璃，改用纯色 + 阴影                                                               |
+| 浮层被裁切                                 | 终端容器 `overflow: hidden` 导致 Dropdown 被裁   | reka-ui 的 `Teleport` 默认已处理；自定义浮层务必走 `Portal`                                   |
+| HMR 下组件状态丢失                         | 改样式后终端实例被重建                           | 终端实例在 `TerminalManager` 中按 `tabId` 持有，与组件生命周期解耦（见附录 B.2）              |
+| Tailwind 扫描不到动态类名                  | 状态色如 `bg-${color}-500` 不生成                | 用 `cva` 显式枚举变体，禁止字符串拼接类名                                                     |
 
 #### 3.4.6 SCSS 接入与边界（重要）
 
@@ -260,12 +261,12 @@ export default defineConfig({
 
 ##### 分工
 
-| 用 Tailwind 写 | 用 SCSS 写 |
-|---|---|
+| 用 Tailwind 写                 | 用 SCSS 写                                     |
+| ------------------------------ | ---------------------------------------------- |
 | 组件布局、间距、颜色、状态变体 | 需要多层嵌套的第三方 DOM 覆盖（xterm、文件树） |
-| shadcn-vue 组件内部样式 | 复用型 mixin（滚动条、文本省略、格子线） |
-| 响应式与暗色（`dark:`） | `@keyframes`、复杂伪元素序列 |
-| 图标尺寸、圆角 | 构建期常量（z-index 层级、终端字体栈） |
+| shadcn-vue 组件内部样式        | 复用型 mixin（滚动条、文本省略、格子线）       |
+| 响应式与暗色（`dark:`）        | `@keyframes`、复杂伪元素序列                   |
+| 图标尺寸、圆角                 | 构建期常量（z-index 层级、终端字体栈）         |
 
 ##### 目录
 
@@ -287,9 +288,17 @@ $term-font-stack: "JetBrains Mono", "Cascadia Code", ui-monospace, monospace;
 
 // src/styles/abstracts/_mixins.scss
 @mixin scrollbar($size: 8px) {
-  &::-webkit-scrollbar { width: $size; height: $size; }
-  &::-webkit-scrollbar-thumb { background: var(--border); border-radius: $size; }
-  &::-webkit-scrollbar-track { background: transparent; }
+  &::-webkit-scrollbar {
+    width: $size;
+    height: $size;
+  }
+  &::-webkit-scrollbar-thumb {
+    background: var(--border);
+    border-radius: $size;
+  }
+  &::-webkit-scrollbar-track {
+    background: transparent;
+  }
 }
 
 // src/styles/abstracts/_index.scss
@@ -310,21 +319,25 @@ $term-font-stack: "JetBrains Mono", "Cascadia Code", ui-monospace, monospace;
 ```vue
 <style lang="scss" scoped>
 .term-wrap {
-  :deep(.xterm-viewport) { @include scrollbar(10px); }
-  :deep(.xterm-rows) { letter-spacing: 0.2px; }
+  :deep(.xterm-viewport) {
+    @include scrollbar(10px);
+  }
+  :deep(.xterm-rows) {
+    letter-spacing: 0.2px;
+  }
 }
 </style>
 ```
 
 ##### 常见坑
 
-| 坑 | 现象 | 处理 |
-|---|---|---|
-| Tailwind 入口写成 `.scss` | Sass 解析 `@import "tailwindcss"` 直接失败 | 入口固定 `.css` |
-| `additionalData` 用相对路径 | 注入到不同目录的文件时路径错位 | 用别名 `@/styles/abstracts`；若某版本不解析别名，改为在每个文件手写 `@use` |
-| 装 `sass` 而非 `sass-embedded` | 大项目冷启动明显变慢 | 装 `sass-embedded`，Vite 会优先使用 |
-| 在 SCSS 里用 `@theme` | 无效，变量不生成 | `@theme` 只写在 `index.css` |
-| 混用两套颜色变量 | 暗色切换后部分区域不变 | 统一消费 `var(--xxx)` CSS 变量 |
+| 坑                             | 现象                                       | 处理                                                                       |
+| ------------------------------ | ------------------------------------------ | -------------------------------------------------------------------------- |
+| Tailwind 入口写成 `.scss`      | Sass 解析 `@import "tailwindcss"` 直接失败 | 入口固定 `.css`                                                            |
+| `additionalData` 用相对路径    | 注入到不同目录的文件时路径错位             | 用别名 `@/styles/abstracts`；若某版本不解析别名，改为在每个文件手写 `@use` |
+| 装 `sass` 而非 `sass-embedded` | 大项目冷启动明显变慢                       | 装 `sass-embedded`，Vite 会优先使用                                        |
+| 在 SCSS 里用 `@theme`          | 无效，变量不生成                           | `@theme` 只写在 `index.css`                                                |
+| 混用两套颜色变量               | 暗色切换后部分区域不变                     | 统一消费 `var(--xxx)` CSS 变量                                             |
 
 > shadcn-vue 深度绑定 Tailwind，因此**不建议为了 SCSS 而放弃 Tailwind** —— 那等于把所有 `ui/` 组件重写一遍。若团队规范要求"样式必须写在 SCSS 里"，正确做法是只把**业务层**样式（页面级、复杂组件级）用 SCSS 组织，原子组件仍保持工具类。
 
@@ -334,15 +347,15 @@ $term-font-stack: "JetBrains Mono", "Cascadia Code", ui-monospace, monospace;
 
 [Vite+](https://viteplus.dev/) 1.0 是 VoidZero 出的**统一工具链**（MIT），一个 `vp` 命令接管七件事：
 
-| 能力 | 底层 | 对应我们原来的方案 |
-|---|---|---|
-| 运行时版本 | 自动选 Node（`vp env`） | 手动 `nvm use` / `.nvmrc` |
-| 包管理器 | 按项目自动识别 pnpm/npm/yarn/bun | 靠约定 |
-| dev / build | Vite + **Rolldown** | `vite` + `vite build` |
-| check | **Oxlint + Oxfmt + tsgo** | eslint + prettier + vue-tsc 三条流水线 |
-| test | Vitest | `vitest` |
-| run | Vite Task（依赖感知 + 缓存） | pnpm workspace 手写编排 |
-| pack | Rolldown / tsdown | 本期不需要 |
+| 能力        | 底层                             | 对应我们原来的方案                     |
+| ----------- | -------------------------------- | -------------------------------------- |
+| 运行时版本  | 自动选 Node（`vp env`）          | 手动 `nvm use` / `.nvmrc`              |
+| 包管理器    | 按项目自动识别 pnpm/npm/yarn/bun | 靠约定                                 |
+| dev / build | Vite + **Rolldown**              | `vite` + `vite build`                  |
+| check       | **Oxlint + Oxfmt + tsgo**        | eslint + prettier + vue-tsc 三条流水线 |
+| test        | Vitest                           | `vitest`                               |
+| run         | Vite Task（依赖感知 + 缓存）     | pnpm workspace 手写编排                |
+| pack        | Rolldown / tsdown                | 本期不需要                             |
 
 对我们的实际收益是 **CI 从三条命令降到一条**，以及 lint/format 快一个量级（官方口径：lint 比 ESLint 快约 50~100×）。
 
@@ -353,24 +366,26 @@ $term-font-stack: "JetBrains Mono", "Cascadia Code", ui-monospace, monospace;
 irm https://vite.plus/ps1 | iex
 ```
 
-| 原来 | 改成 |
-|---|---|
-| `pnpm dev` | `vp dev` |
-| `pnpm build` | `vp build` |
+| 原来                                            | 改成                         |
+| ----------------------------------------------- | ---------------------------- |
+| `pnpm dev`                                      | `vp dev`                     |
+| `pnpm build`                                    | `vp build`                   |
 | `eslint . && prettier -c . && vue-tsc --noEmit` | `vp check`（`--fix` 自动修） |
-| `vitest run` | `vp test` |
-| `pnpm tauri dev` | `vp run tauri dev` |
+| `vitest run`                                    | `vp test`                    |
+| `pnpm tauri dev`                                | `vp run tauri dev`           |
 
 #### 3.5.3 与 Tauri 的集成点
 
 - `src-tauri/tauri.conf.json` 里改两处即可，**Tauri 不关心前端命令是谁跑的**：
   ```json
-  { "build": {
+  {
+    "build": {
       "beforeDevCommand": "vp dev",
       "beforeBuildCommand": "vp build",
       "devUrl": "http://localhost:1420",
       "frontendDist": "../dist"
-  } }
+    }
+  }
   ```
 - `vite.config.ts` 仍是唯一配置源（端口 1420、`strictPort`、忽略 `src-tauri/**`），Vite+ 复用同一份配置，**不要把配置迁到 `vp` 私有文件里**。
 - Rust 工具链（rustup / cargo）不在 Vite+ 管辖内，CI 仍需单独装。
@@ -512,17 +527,18 @@ pub async fn term_open(
 }
 ```
 
-| 优化点 | 做法 | 效果 |
-|---|---|---|
-| 攒批 | 8 ms 或 64 KB 触发一次 IPC | 把 `cat 大文件` 场景的 IPC 次数从数万降到数十 |
-| 编码 | 若 `Channel<Vec<u8>>` 走 JSON 数组（体积约 3.4×），改 `Channel<String>` + base64（1.33×）或走本地 WebSocket 二进制 | 减少 60%+ 流量 |
-| 渲染 | WebGL addon，检测 `webglcontextlost` 自动降级 DOM 渲染 | 大输出不卡死 |
-| 背压 | 前端每 256 KB 回一个 ack，后端未收到 ack 则暂停 `ch.wait()` 消费（SSH 窗口自然反压） | 防止内存暴涨 |
-| 上行 | 键盘输入 16 ms 合并一次（`write` 队列），单次 invoke | 输入不抖动 |
+| 优化点 | 做法                                                                                                               | 效果                                          |
+| ------ | ------------------------------------------------------------------------------------------------------------------ | --------------------------------------------- |
+| 攒批   | 8 ms 或 64 KB 触发一次 IPC                                                                                         | 把 `cat 大文件` 场景的 IPC 次数从数万降到数十 |
+| 编码   | 若 `Channel<Vec<u8>>` 走 JSON 数组（体积约 3.4×），改 `Channel<String>` + base64（1.33×）或走本地 WebSocket 二进制 | 减少 60%+ 流量                                |
+| 渲染   | WebGL addon，检测 `webglcontextlost` 自动降级 DOM 渲染                                                             | 大输出不卡死                                  |
+| 背压   | 前端每 256 KB 回一个 ack，后端未收到 ack 则暂停 `ch.wait()` 消费（SSH 窗口自然反压）                               | 防止内存暴涨                                  |
+| 上行   | 键盘输入 16 ms 合并一次（`write` 队列），单次 invoke                                                               | 输入不抖动                                    |
 
 > **务必在 M1 阶段做一次基准**：`seq 1 3000000`（约 25 MB 输出）与 `vttest` 全屏刷新，记录端到端耗时与内存峰值。若 `Channel` 吞吐不足（经验阈值：> 8 MB/s 待验证），切本地 WebSocket 兜底方案（127.0.0.1 + 随机 token + custom protocol 校验）。
 
 **其他终端能力**：
+
 - `resize`：xterm `onResize` → `channel.window_change(cols, rows)`（需节流 100 ms）。
 - 搜索：`@xterm/addon-search`，仅搜 scrollback，不请求服务器。
 - 录制：在 bridge 层旁路把原始字节写成 **asciicast v2**（`{"version":2}`，只追加 `o` 事件），零额外开销。
@@ -568,39 +584,39 @@ let sftp = SftpSession::new(ch.into_stream()).await?;
 
 设计要点：
 
-| 问题 | 方案 |
-|---|---|
-| 大目录卡 UI | `read_dir` 分页拉取（先 500 条），前端虚拟滚动；排序/过滤在前端做 |
-| 大文件慢 | 分块并发（默认 4 并发 × 1 MB），`openssh-sftp-client` 自带并行读写；进度事件用 `Channel<Progress>` 节流 100 ms |
-| 断点续传 | 本地记录 `(remote_path, size, mtime, offset)`；mtime 不一致则重传；远端用 `setstat` 设置 mtime/权限 |
-| 权限/属性 | 展示 `rwxr-xr-x` + 数字两种；`chmod` 用八进制输入 |
-| 符号链接 | 明确区分"跟随"与"作为链接操作"，删除时默认只删链接 |
-| 路径安全 | 拒绝含 `..` 的拼接逃逸；Windows 本地路径用 `PathBuf` 归一化，禁用保留名（`CON`/`NUL`） |
-| 传输队列 | 全局任务队列（并发上限可配），支持暂停/取消/重试，与 UI 解耦 |
+| 问题        | 方案                                                                                                           |
+| ----------- | -------------------------------------------------------------------------------------------------------------- |
+| 大目录卡 UI | `read_dir` 分页拉取（先 500 条），前端虚拟滚动；排序/过滤在前端做                                              |
+| 大文件慢    | 分块并发（默认 4 并发 × 1 MB），`openssh-sftp-client` 自带并行读写；进度事件用 `Channel<Progress>` 节流 100 ms |
+| 断点续传    | 本地记录 `(remote_path, size, mtime, offset)`；mtime 不一致则重传；远端用 `setstat` 设置 mtime/权限            |
+| 权限/属性   | 展示 `rwxr-xr-x` + 数字两种；`chmod` 用八进制输入                                                              |
+| 符号链接    | 明确区分"跟随"与"作为链接操作"，删除时默认只删链接                                                             |
+| 路径安全    | 拒绝含 `..` 的拼接逃逸；Windows 本地路径用 `PathBuf` 归一化，禁用保留名（`CON`/`NUL`）                         |
+| 传输队列    | 全局任务队列（并发上限可配），支持暂停/取消/重试，与 UI 解耦                                                   |
 
 ### 5.5 端口转发 / 隧道
 
-| 类型 | 实现方式（russh） | 说明 |
-|---|---|---|
-| **本地 `-L`** | `channel_open_direct_tcpip(dst_host, dst_port, origin, 0)` + `copy_bidirectional` | 在 `127.0.0.1:port` 起 `TcpListener`，每个入站连接开一条 direct-tcpip 通道 |
-| **动态 `-D`** | 本地起 SOCKS5 服务（`fast-socks5`）→ 自定义 connector 走 `direct_tcpip` | 纯本地代码 + 已有 SSH 通道，最稳 |
-| **远程 `-R`** | 全局请求 `tcpip_forward(addr, port)` + 在 `client::Handler` 中实现 `server_channel_open_forwarded_tcpip` 回调，把服务器回推的通道桥接到本地 `TcpStream` | 实现最复杂、兼容性风险最高（见 11.2）；失败时用系统 `ssh.exe -N -R` 兜底 |
+| 类型          | 实现方式（russh）                                                                                                                                       | 说明                                                                       |
+| ------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------- |
+| **本地 `-L`** | `channel_open_direct_tcpip(dst_host, dst_port, origin, 0)` + `copy_bidirectional`                                                                       | 在 `127.0.0.1:port` 起 `TcpListener`，每个入站连接开一条 direct-tcpip 通道 |
+| **动态 `-D`** | 本地起 SOCKS5 服务（`fast-socks5`）→ 自定义 connector 走 `direct_tcpip`                                                                                 | 纯本地代码 + 已有 SSH 通道，最稳                                           |
+| **远程 `-R`** | 全局请求 `tcpip_forward(addr, port)` + 在 `client::Handler` 中实现 `server_channel_open_forwarded_tcpip` 回调，把服务器回推的通道桥接到本地 `TcpStream` | 实现最复杂、兼容性风险最高（见 11.2）；失败时用系统 `ssh.exe -N -R` 兜底   |
 
 隧道管理模型：
 
 ```ts
 interface ForwardRule {
-  id: string
-  hostId: string
-  type: 'local' | 'remote' | 'dynamic'
-  bindHost: string        // 默认 127.0.0.1，绑 0.0.0.0 需二次确认
-  bindPort: number
-  targetHost?: string
-  targetPort?: number
-  autoStart: boolean      // 连接建立后自动拉起
-  status: 'stopped' | 'running' | 'error'
-  bytesIn: number
-  bytesOut: number
+  id: string;
+  hostId: string;
+  type: "local" | "remote" | "dynamic";
+  bindHost: string; // 默认 127.0.0.1，绑 0.0.0.0 需二次确认
+  bindPort: number;
+  targetHost?: string;
+  targetPort?: number;
+  autoStart: boolean; // 连接建立后自动拉起
+  status: "stopped" | "running" | "error";
+  bytesIn: number;
+  bytesOut: number;
 }
 ```
 
@@ -723,13 +739,13 @@ CREATE TABLE app_setting (key TEXT PRIMARY KEY, value TEXT NOT NULL);
 
 ### 6.3 布局与尺寸
 
-| 区域 | 尺寸 | 行为 |
-|---|---|---|
-| 标签栏 | 36px 高 | 溢出横向滚动，不换行；标签最大宽 200px |
-| 左侧栏 | 260px（可拖 200~400） | 可完全折叠；折叠后保留 4px 边缘热区 |
-| 状态栏 | 24px | 常驻，展示当前标签的 host/延迟/编码 |
-| 工作区 | 自适应 | 终端与 SFTP 支持上下/左右分屏 |
-| 传输队列 | 右下浮动 320px | 收起为一个进度环，不阻断操作 |
+| 区域     | 尺寸                  | 行为                                   |
+| -------- | --------------------- | -------------------------------------- |
+| 标签栏   | 36px 高               | 溢出横向滚动，不换行；标签最大宽 200px |
+| 左侧栏   | 260px（可拖 200~400） | 可完全折叠；折叠后保留 4px 边缘热区    |
+| 状态栏   | 24px                  | 常驻，展示当前标签的 host/延迟/编码    |
+| 工作区   | 自适应                | 终端与 SFTP 支持上下/左右分屏          |
+| 传输队列 | 右下浮动 320px        | 收起为一个进度环，不阻断操作           |
 
 ```
 ┌──────────────────────────────────────────────────────────────────────────┐
@@ -775,14 +791,14 @@ SFTP 双栏（可拖中缝）：
 
 **连接流程**（每一步都要有可见反馈，不允许点了没反应）：
 
-| 阶段 | 界面表现 | 约束 |
-|---|---|---|
-| 双击主机 | 立刻新建标签，状态点变黄并显示"连接中…" | **先出标签再建连**，不留空白等待 |
-| 认证 | 需要密码/口令/OTP 时，标签内嵌表单（不是弹窗） | 输错就地提示、保留输入、可切换认证方式 |
-| 建连成功 | 状态点变绿，焦点自动进入终端 | 焦点必须在终端，用户可直接打字 |
-| 建连失败 | 标签内展示错误三段式 + "重试 / 编辑 / 关闭" | **不关闭标签**，保留上下文 |
-| 主机密钥变更 | 阻断式对话框（见下） | 必须手动确认，默认焦点在"取消连接" |
-| 断线 | 标签灰化 + 顶部细条"连接已断开 · 重连" | 保留 scrollback；**不自动重放命令** |
+| 阶段         | 界面表现                                       | 约束                                   |
+| ------------ | ---------------------------------------------- | -------------------------------------- |
+| 双击主机     | 立刻新建标签，状态点变黄并显示"连接中…"        | **先出标签再建连**，不留空白等待       |
+| 认证         | 需要密码/口令/OTP 时，标签内嵌表单（不是弹窗） | 输错就地提示、保留输入、可切换认证方式 |
+| 建连成功     | 状态点变绿，焦点自动进入终端                   | 焦点必须在终端，用户可直接打字         |
+| 建连失败     | 标签内展示错误三段式 + "重试 / 编辑 / 关闭"    | **不关闭标签**，保留上下文             |
+| 主机密钥变更 | 阻断式对话框（见下）                           | 必须手动确认，默认焦点在"取消连接"     |
+| 断线         | 标签灰化 + 顶部细条"连接已断开 · 重连"         | 保留 scrollback；**不自动重放命令**    |
 
 ```
 ┌ ⚠ 主机密钥已变更 ──────────────────────────────────────┐
@@ -804,60 +820,61 @@ SFTP 双栏（可拖中缝）：
 **这是最容易做错的地方**：终端会把所有 `Ctrl+X` 直接送给 shell，所以宿主快捷键不能占用 shell/readline/vim 的常用组合。
 
 规则：
+
 1. 宿主快捷键一律用 `Ctrl/Cmd + Shift + *` 或 `Ctrl/Cmd + Alt + *`；
 2. 只有"非终端焦点"时才让 `Ctrl/Cmd + K`、`Ctrl/Cmd + T` 这类裸组合生效；
 3. 终端内 `Ctrl+F` **必须留给远端**（vim 翻页），搜索用 `Ctrl+Shift+F`；
 4. `Esc` 有层级：先关浮层 → 再退出终端选中/复制模式，绝不把"关浮层"的 Esc 发给远端。
 
-| 场景 | 快捷键 | 说明 |
-|---|---|---|
-| 全局 | `Ctrl/Cmd + K` | 命令面板：连主机 / 切标签 / 跑片段 |
-| 全局 | `Ctrl/Cmd + T` | 新建终端标签（用当前选中主机） |
-| 全局 | `Ctrl/Cmd + W` | 关闭当前标签（有活动任务时二次确认） |
-| 全局 | `Ctrl/Cmd + Shift + E` | 折叠/展开左侧栏 |
-| 全局 | `Ctrl/Cmd + Tab` | 切换标签；`Ctrl/Cmd + 1..9` 直达第 N 个 |
-| 全局 | `Ctrl/Cmd + ,` | 设置 |
-| 终端 | `Ctrl/Cmd + Shift + F` | 搜索当前终端 scrollback |
+| 场景 | 快捷键                     | 说明                                    |
+| ---- | -------------------------- | --------------------------------------- |
+| 全局 | `Ctrl/Cmd + K`             | 命令面板：连主机 / 切标签 / 跑片段      |
+| 全局 | `Ctrl/Cmd + T`             | 新建终端标签（用当前选中主机）          |
+| 全局 | `Ctrl/Cmd + W`             | 关闭当前标签（有活动任务时二次确认）    |
+| 全局 | `Ctrl/Cmd + Shift + E`     | 折叠/展开左侧栏                         |
+| 全局 | `Ctrl/Cmd + Tab`           | 切换标签；`Ctrl/Cmd + 1..9` 直达第 N 个 |
+| 全局 | `Ctrl/Cmd + ,`             | 设置                                    |
+| 终端 | `Ctrl/Cmd + Shift + F`     | 搜索当前终端 scrollback                 |
 | 终端 | `Ctrl/Cmd + Shift + C / V` | 复制 / 粘贴（与 Windows Terminal 一致） |
-| 终端 | `Ctrl/Cmd + Shift + K` | 本机清屏（不发远端） |
-| SFTP | `F5` | 刷新双栏 |
-| SFTP | `Ctrl/Cmd + Shift + U` | 上传选中项 |
-| 批量 | `Ctrl/Cmd + Enter` | 执行 |
+| 终端 | `Ctrl/Cmd + Shift + K`     | 本机清屏（不发远端）                    |
+| SFTP | `F5`                       | 刷新双栏                                |
+| SFTP | `Ctrl/Cmd + Shift + U`     | 上传选中项                              |
+| 批量 | `Ctrl/Cmd + Enter`         | 执行                                    |
 
 ### 6.6 视觉规范
 
 **颜色语义**（暗色为默认主题，亮色同等完整）：
 
-| 语义 | 暗色 | 亮色 | 使用位置 |
-|---|---|---|---|
-| 已连接 | `#3ecf8e` | `#16a34a` | 状态点、连接成功提示 |
-| 连接中 | `#e3b341` | `#d97706` | 状态点（2s 呼吸动画） |
-| 失败 | `#f85149` | `#dc2626` | 状态点、错误文案、危险按钮 |
-| 已断开 | `#6e7681` | `#94a3b8` | 灰化标签、禁用态 |
+| 语义   | 暗色      | 亮色      | 使用位置                   |
+| ------ | --------- | --------- | -------------------------- |
+| 已连接 | `#3ecf8e` | `#16a34a` | 状态点、连接成功提示       |
+| 连接中 | `#e3b341` | `#d97706` | 状态点（2s 呼吸动画）      |
+| 失败   | `#f85149` | `#dc2626` | 状态点、错误文案、危险按钮 |
+| 已断开 | `#6e7681` | `#94a3b8` | 灰化标签、禁用态           |
 
 - **状态不能只靠颜色**：每个状态点旁边或 tooltip 里必须有文字，色盲用户也能分辨。
 - **危险色只用于破坏性操作**；主色（品牌蓝）只用于主操作，一屏内主按钮不超过 1 个。
 
-| Token | 值 | 说明 |
-|---|---|---|
-| 基准字号 | 13px / 行高 20px | 终端 13px、`lineHeight: 1.2` |
-| 表格/列表行高 | 28px | 密排，hover 整行高亮 8% 透明度 |
-| 图标 | 16px，stroke 1.5 | lucide |
-| 圆角 | 6px（卡片 8px） | 与 `--radius` 一致 |
-| 间距 | 4 的倍数 | 区块间 16/24，行内 4/8 |
-| 阴影 | 仅浮层使用，2 级 | 终端区域不用阴影 |
+| Token         | 值               | 说明                           |
+| ------------- | ---------------- | ------------------------------ |
+| 基准字号      | 13px / 行高 20px | 终端 13px、`lineHeight: 1.2`   |
+| 表格/列表行高 | 28px             | 密排，hover 整行高亮 8% 透明度 |
+| 图标          | 16px，stroke 1.5 | lucide                         |
+| 圆角          | 6px（卡片 8px）  | 与 `--radius` 一致             |
+| 间距          | 4 的倍数         | 区块间 16/24，行内 4/8         |
+| 阴影          | 仅浮层使用，2 级 | 终端区域不用阴影               |
 
 ### 6.7 组件行为规格
 
-| 组件 | 必须 | 禁止 |
-|---|---|---|
-| 标签栏 | 中键关闭、拖拽排序、状态点、hover 显示关闭按钮、溢出滚动 | 用 `Tabs` 语义、点击空白处切换 |
-| 主机树 | 双击连接、右键菜单、即时过滤、连接中显示 spinner | 单击即连接（误触率极高） |
-| 终端 | 焦点自动进入、断线不清屏、滚回可搜索 | 连接失败就销毁标签 |
-| SFTP 文件表 | 键盘上下 + 回车进入、拖拽上传、列宽可调、`>500` 行走虚拟滚动 | 一次性渲染整目录 |
-| 危险确认框 | 默认焦点在"取消"、危险按钮为红色描边而非实心 | 危险按钮用主色实心 |
-| Toast | 只承载"已完成/可忽略"，≤5s 自动消失 | 承载需要用户决策的错误 |
-| 空状态 | 给 1~3 个可点击动作 | 大插画占满屏幕 |
+| 组件        | 必须                                                         | 禁止                           |
+| ----------- | ------------------------------------------------------------ | ------------------------------ |
+| 标签栏      | 中键关闭、拖拽排序、状态点、hover 显示关闭按钮、溢出滚动     | 用 `Tabs` 语义、点击空白处切换 |
+| 主机树      | 双击连接、右键菜单、即时过滤、连接中显示 spinner             | 单击即连接（误触率极高）       |
+| 终端        | 焦点自动进入、断线不清屏、滚回可搜索                         | 连接失败就销毁标签             |
+| SFTP 文件表 | 键盘上下 + 回车进入、拖拽上传、列宽可调、`>500` 行走虚拟滚动 | 一次性渲染整目录               |
+| 危险确认框  | 默认焦点在"取消"、危险按钮为红色描边而非实心                 | 危险按钮用主色实心             |
+| Toast       | 只承载"已完成/可忽略"，≤5s 自动消失                          | 承载需要用户决策的错误         |
+| 空状态      | 给 1~3 个可点击动作                                          | 大插画占满屏幕                 |
 
 ### 6.8 反馈、状态与可访问性
 
@@ -882,15 +899,15 @@ SFTP 双栏（可拖中缝）：
 
 ### 7.1 威胁模型
 
-| 威胁 | 缓解措施 |
-|---|---|
-| 服务器冒充（MITM） | 强制 known_hosts 校验；不匹配即拒绝；指纹变更留审计记录 |
-| 本机其他用户窃取凭据 | 凭据只进 OS Keyring / 加密 vault；app_data 目录按用户 ACL；便携 vault 用 Argon2id 强 KDF |
-| 私钥泄露到前端 | 私钥解析、签名全在 Rust；IPC 只传公钥与指纹；命令返回值做类型白名单 |
-| 前端 XSS 借 IPC 越权 | Tauri 2 **Capabilities 白名单**最小授权；CSP 禁内联脚本；禁用 `dangerousRemoteDomainIpcAccess` |
-| 恶意主机回传超长/畸形数据 | 通道数据按 64 KB 上限处理；解析 SFTP 属性做边界检查；单会话内存上限（默认 64 MB 缓冲区） |
-| 供应链 | 锁定 `Cargo.lock` / `pnpm-lock.yaml`；`cargo-deny` 定期审 CVE；签名发布产物 |
-| 日志泄露 | `tracing` 字段级脱敏：密码、私钥、token、`Authorization` 一律不落盘；日志目录权限收紧 |
+| 威胁                      | 缓解措施                                                                                       |
+| ------------------------- | ---------------------------------------------------------------------------------------------- |
+| 服务器冒充（MITM）        | 强制 known_hosts 校验；不匹配即拒绝；指纹变更留审计记录                                        |
+| 本机其他用户窃取凭据      | 凭据只进 OS Keyring / 加密 vault；app_data 目录按用户 ACL；便携 vault 用 Argon2id 强 KDF       |
+| 私钥泄露到前端            | 私钥解析、签名全在 Rust；IPC 只传公钥与指纹；命令返回值做类型白名单                            |
+| 前端 XSS 借 IPC 越权      | Tauri 2 **Capabilities 白名单**最小授权；CSP 禁内联脚本；禁用 `dangerousRemoteDomainIpcAccess` |
+| 恶意主机回传超长/畸形数据 | 通道数据按 64 KB 上限处理；解析 SFTP 属性做边界检查；单会话内存上限（默认 64 MB 缓冲区）       |
+| 供应链                    | 锁定 `Cargo.lock` / `pnpm-lock.yaml`；`cargo-deny` 定期审 CVE；签名发布产物                    |
+| 日志泄露                  | `tracing` 字段级脱敏：密码、私钥、token、`Authorization` 一律不落盘；日志目录权限收紧          |
 
 ### 7.2 Tauri 2 加固清单
 
@@ -919,34 +936,34 @@ SFTP 双栏（可拖中缝）：
 
 ## 8. 性能预算与验收口径
 
-| 指标 | 目标 | 测量方法 |
-|---|---|---|
-| 冷启动到可用 | < 1.5 s | `tracing` 打点：进程启动 → 首屏可交互 |
-| 安装包体积 | < 15 MB（不含 WebView2 运行时） | CI 产物 |
-| 终端输出吞吐 | ≥ 10 MB/s（本地回环） | `seq 1 3000000` 端到端计时 |
-| 输入延迟 P95 | < 30 ms | 输入回显时间戳打点 |
-| 50 会话内存 | < 800 MB | 进程 RSS |
-| SFTP 100 MB 上传 | 接近裸带宽（≥ 80%） | 与 `scp` 对比 |
-| 批量 100 主机 | 并发 8 下 10 s 内出结果 | 压测脚本 |
+| 指标             | 目标                            | 测量方法                              |
+| ---------------- | ------------------------------- | ------------------------------------- |
+| 冷启动到可用     | < 1.5 s                         | `tracing` 打点：进程启动 → 首屏可交互 |
+| 安装包体积       | < 15 MB（不含 WebView2 运行时） | CI 产物                               |
+| 终端输出吞吐     | ≥ 10 MB/s（本地回环）           | `seq 1 3000000` 端到端计时            |
+| 输入延迟 P95     | < 30 ms                         | 输入回显时间戳打点                    |
+| 50 会话内存      | < 800 MB                        | 进程 RSS                              |
+| SFTP 100 MB 上传 | 接近裸带宽（≥ 80%）             | 与 `scp` 对比                         |
+| 批量 100 主机    | 并发 8 下 10 s 内出结果         | 压测脚本                              |
 
 ---
 
 ## 9. 前后端接口契约
 
-| 命令 | 入参 | 返回/流 | 说明 |
-|---|---|---|---|
-| `term_open` | `tabId, hostId, cols, rows` + `Channel<Vec<u8>>` | `Result<()>` | 建 PTY + shell，下行走 Channel |
-| `term_write` | `tabId, data: String` | `Result<()>` | 键盘输入（前端已合并） |
-| `term_resize` | `tabId, cols, rows` | `Result<()>` | 节流调用 |
-| `term_close` | `tabId` | `Result<()>` | 关闭通道 |
-| `session_connect` / `session_disconnect` | `hostId` | `Result<ConnInfo>` | 预连接（不做 PTY） |
-| `sftp_open` / `sftp_list` / `sftp_download` / `sftp_upload` / `sftp_mkdir` / `sftp_rm` / `sftp_rename` / `sftp_chmod` | — | `Result<...>` + `Channel<Progress>` | SFTP 全套 |
-| `forward_start` / `forward_stop` / `forward_list` | `ruleId` | `Result<()>` | 隧道生命周期 |
-| `forward_stats` | — | `Channel<ForwardStat>` | 1 s 一次流量快照 |
-| `batch_run` | `hostIds, command, concurrency, timeout` | `Channel<HostResult>` | 流式回传 |
-| `key_import` / `key_generate` / `key_delete` | — | `Result<KeyMeta>` | 私钥只在后端 |
-| `known_host_*` | — | `Result<...>` | 查询/信任/删除 |
-| `host_*` / `folder_*` / `snippet_*` | — | `Result<...>` | CRUD |
+| 命令                                                                                                                  | 入参                                             | 返回/流                             | 说明                           |
+| --------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------ | ----------------------------------- | ------------------------------ |
+| `term_open`                                                                                                           | `tabId, hostId, cols, rows` + `Channel<Vec<u8>>` | `Result<()>`                        | 建 PTY + shell，下行走 Channel |
+| `term_write`                                                                                                          | `tabId, data: String`                            | `Result<()>`                        | 键盘输入（前端已合并）         |
+| `term_resize`                                                                                                         | `tabId, cols, rows`                              | `Result<()>`                        | 节流调用                       |
+| `term_close`                                                                                                          | `tabId`                                          | `Result<()>`                        | 关闭通道                       |
+| `session_connect` / `session_disconnect`                                                                              | `hostId`                                         | `Result<ConnInfo>`                  | 预连接（不做 PTY）             |
+| `sftp_open` / `sftp_list` / `sftp_download` / `sftp_upload` / `sftp_mkdir` / `sftp_rm` / `sftp_rename` / `sftp_chmod` | —                                                | `Result<...>` + `Channel<Progress>` | SFTP 全套                      |
+| `forward_start` / `forward_stop` / `forward_list`                                                                     | `ruleId`                                         | `Result<()>`                        | 隧道生命周期                   |
+| `forward_stats`                                                                                                       | —                                                | `Channel<ForwardStat>`              | 1 s 一次流量快照               |
+| `batch_run`                                                                                                           | `hostIds, command, concurrency, timeout`         | `Channel<HostResult>`               | 流式回传                       |
+| `key_import` / `key_generate` / `key_delete`                                                                          | —                                                | `Result<KeyMeta>`                   | 私钥只在后端                   |
+| `known_host_*`                                                                                                        | —                                                | `Result<...>`                       | 查询/信任/删除                 |
+| `host_*` / `folder_*` / `snippet_*`                                                                                   | —                                                | `Result<...>`                       | CRUD                           |
 
 事件（低频、全局）：`connection:state`（connecting/connected/lost）、`forward:state`、`error:global`。
 
@@ -954,15 +971,15 @@ SFTP 双栏（可拖中缝）：
 
 ## 10. 里程碑
 
-| 阶段 | 交付 | 验收标准 |
-|---|---|---|
-| **M0 骨架** | Tauri 2 + Vue 3 脚手架、Vite+（`vp`）接入并验证 3.5.4 三点、shadcn-vue 初始化与主题变量、CI（`setup-vp`）、SQLite 迁移、capabilities、日志 | `vp run tauri dev` 起得来；`vp check` / `vp build` 通过；打包产物可安装运行 |
-| **M1 单会话终端** | 密码/密钥认证、PTY、xterm 渲染、resize、重连 | 能连真实主机跑 `vim`/`htop`/`tmux`；吞吐基准达标 |
-| **M2 会话与密钥** | 会话树 CRUD、keyring、known_hosts TOFU、`~/.ssh/config` 导入 | 导入 20 台主机配置可用；指纹变更被拦截 |
-| **M3 SFTP** | 双栏、上传下载、队列、续传、权限 | 100 MB 文件传输速率 ≥ 80% 裸带宽；断网续传成功 |
-| **M4 端口转发** | `-L` / `-D` / `-R`、规则管理、流量统计 | 三类型各跑通一组用例；`-R` 失败有明确降级提示 |
-| **M5 批量运维** | 并发执行、结果流式表、片段库、导出 | 100 主机批量执行；中断可取消；危险命令被拦截 |
-| **M6 加固发布** | CSP/capabilities 收敛、签名、自动更新、E2E | 安全清单逐项打勾；自动升级链路验证 |
+| 阶段              | 交付                                                                                                                                       | 验收标准                                                                    |
+| ----------------- | ------------------------------------------------------------------------------------------------------------------------------------------ | --------------------------------------------------------------------------- |
+| **M0 骨架**       | Tauri 2 + Vue 3 脚手架、Vite+（`vp`）接入并验证 3.5.4 三点、shadcn-vue 初始化与主题变量、CI（`setup-vp`）、SQLite 迁移、capabilities、日志 | `vp run tauri dev` 起得来；`vp check` / `vp build` 通过；打包产物可安装运行 |
+| **M1 单会话终端** | 密码/密钥认证、PTY、xterm 渲染、resize、重连                                                                                               | 能连真实主机跑 `vim`/`htop`/`tmux`；吞吐基准达标                            |
+| **M2 会话与密钥** | 会话树 CRUD、keyring、known_hosts TOFU、`~/.ssh/config` 导入                                                                               | 导入 20 台主机配置可用；指纹变更被拦截                                      |
+| **M3 SFTP**       | 双栏、上传下载、队列、续传、权限                                                                                                           | 100 MB 文件传输速率 ≥ 80% 裸带宽；断网续传成功                              |
+| **M4 端口转发**   | `-L` / `-D` / `-R`、规则管理、流量统计                                                                                                     | 三类型各跑通一组用例；`-R` 失败有明确降级提示                               |
+| **M5 批量运维**   | 并发执行、结果流式表、片段库、导出                                                                                                         | 100 主机批量执行；中断可取消；危险命令被拦截                                |
+| **M6 加固发布**   | CSP/capabilities 收敛、签名、自动更新、E2E                                                                                                 | 安全清单逐项打勾；自动升级链路验证                                          |
 
 ---
 
@@ -1008,12 +1025,12 @@ tauri-plugin-updater = "2"
 
 russh = "0.5x"
 russh-sftp = "2"
-openssh-sftp-client = "0.15"        # 高层 SFTP（进度/并发）
+openssh-sftp-client = "0.15" # 高层 SFTP（进度/并发）
 ssh-key = { version = "0.6", features = ["ed25519", "rsa", "encryption"] }
 
 tokio = { version = "1", features = ["full"] }
 tokio-util = { version = "0.7", features = ["io"] }
-fast-socks5 = "0.9"                 # 动态转发
+fast-socks5 = "0.9" # 动态转发
 
 sqlx = { version = "0.8", features = ["sqlite", "runtime-tokio", "migrate"] }
 keyring = { version = "3", features = ["windows-native", "apple-native", "sync-secret-service"] }
@@ -1145,66 +1162,75 @@ pub async fn connect(
 
 ```ts
 // src/core/term/manager.ts
-import { Terminal } from '@xterm/xterm'
-import { FitAddon } from '@xterm/addon-fit'
-import { WebglAddon } from '@xterm/addon-webgl'
-import { invoke, Channel } from '@tauri-apps/api/core'
+import { Terminal } from "@xterm/xterm";
+import { FitAddon } from "@xterm/addon-fit";
+import { WebglAddon } from "@xterm/addon-webgl";
+import { invoke, Channel } from "@tauri-apps/api/core";
 
-interface TermEntry { term: Terminal; fit: FitAddon; ch: Channel<number[]> }
+interface TermEntry {
+  term: Terminal;
+  fit: FitAddon;
+  ch: Channel<number[]>;
+}
 
 /** 终端实例池：与标签生命周期一致，不放进 Pinia */
 class TerminalManager {
-  private map = new Map<string, TermEntry>()
+  private map = new Map<string, TermEntry>();
 
   async open(tabId: string, hostId: string, el: HTMLElement) {
     const term = new Terminal({
-      fontFamily: 'JetBrains Mono, Consolas, monospace',
+      fontFamily: "JetBrains Mono, Consolas, monospace",
       fontSize: 14,
       cursorBlink: true,
       scrollback: 10000,
       allowProposedApi: true,
-    })
-    const fit = new FitAddon()
-    term.loadAddon(fit)
-    term.open(el)
+    });
+    const fit = new FitAddon();
+    term.loadAddon(fit);
+    term.open(el);
     try {
-      term.loadAddon(new WebglAddon())          // 失败不致命
-    } catch { /* 降级 DOM 渲染 */ }
+      term.loadAddon(new WebglAddon()); // 失败不致命
+    } catch {
+      /* 降级 DOM 渲染 */
+    }
 
-    fit.fit()
-    const ch = new Channel<number[]>()
-    ch.onmessage = (data) => term.write(new Uint8Array(data))
+    fit.fit();
+    const ch = new Channel<number[]>();
+    ch.onmessage = (data) => term.write(new Uint8Array(data));
 
-    await invoke('term_open', {
-      tabId, hostId,
-      cols: term.cols, rows: term.rows,
+    await invoke("term_open", {
+      tabId,
+      hostId,
+      cols: term.cols,
+      rows: term.rows,
       onData: ch,
-    })
+    });
 
     // 上行合并：16 ms 内的按键合成一次 IPC
-    let buf = ''
-    let timer: number | undefined
+    let buf = "";
+    let timer: number | undefined;
     term.onData((d) => {
-      buf += d
+      buf += d;
       timer ??= window.setTimeout(() => {
-        invoke('term_write', { tabId, data: buf })
-        buf = ''; timer = undefined
-      }, 16)
-    })
+        invoke("term_write", { tabId, data: buf });
+        buf = "";
+        timer = undefined;
+      }, 16);
+    });
 
-    term.onResize(({ cols, rows }) => invoke('term_resize', { tabId, cols, rows }))
-    this.map.set(tabId, { term, fit, ch })
+    term.onResize(({ cols, rows }) => invoke("term_resize", { tabId, cols, rows }));
+    this.map.set(tabId, { term, fit, ch });
   }
 
   dispose(tabId: string) {
-    const e = this.map.get(tabId)
-    if (!e) return
-    void invoke('term_close', { tabId })
-    e.term.dispose()
-    this.map.delete(tabId)
+    const e = this.map.get(tabId);
+    if (!e) return;
+    void invoke("term_close", { tabId });
+    e.term.dispose();
+    this.map.delete(tabId);
   }
 }
-export const terminalManager = new TerminalManager()
+export const terminalManager = new TerminalManager();
 ```
 
 ```vue

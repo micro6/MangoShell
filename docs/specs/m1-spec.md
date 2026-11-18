@@ -9,14 +9,14 @@
 
 ## 2. 已核实的技术事实（决定实现方式）
 
-| 事实 | 结论 |
-|---|---|
-| 本机无 `cmake` | russh 关闭默认 `aws-lc-rs`，改用 `ring` 特性 |
-| russh 0.65.2 API | `client::connect` 返回 `Handle<H>`；`Handler::check_server_key(&PublicKeyOrCertificate)` 返回 `bool`；`Channel::split()` 得到 `ChannelReadHalf` + `ChannelWriteHalf` |
-| `ChannelWriteHalf` 非 `Clone` | 用 `Arc<ChannelWriteHalf<Msg>>` 共享给 `term_write` / `term_resize` / `term_close` |
-| `ChannelWriteHalf` 方法均 `&self` | `data_bytes / window_change / close` 可直接并发调用 |
-| 下行 `Channel<Vec<u8>>` | 按总方案先落地，M1 末尾做吞吐基准，不提前切 WebSocket |
-| xterm 6.0.0 | `@xterm/addon-*` 均已安装，`term.unicode.activeVersion = "11"` 需 `allowProposedApi` |
+| 事实                              | 结论                                                                                                                                                                 |
+| --------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 本机无 `cmake`                    | russh 关闭默认 `aws-lc-rs`，改用 `ring` 特性                                                                                                                         |
+| russh 0.65.2 API                  | `client::connect` 返回 `Handle<H>`；`Handler::check_server_key(&PublicKeyOrCertificate)` 返回 `bool`；`Channel::split()` 得到 `ChannelReadHalf` + `ChannelWriteHalf` |
+| `ChannelWriteHalf` 非 `Clone`     | 用 `Arc<ChannelWriteHalf<Msg>>` 共享给 `term_write` / `term_resize` / `term_close`                                                                                   |
+| `ChannelWriteHalf` 方法均 `&self` | `data_bytes / window_change / close` 可直接并发调用                                                                                                                  |
+| 下行 `Channel<Vec<u8>>`           | 按总方案先落地，M1 末尾做吞吐基准，不提前切 WebSocket                                                                                                                |
+| xterm 6.0.0                       | `@xterm/addon-*` 均已安装，`term.unicode.activeVersion = "11"` 需 `allowProposedApi`                                                                                 |
 
 ## 3. 范围
 
@@ -45,7 +45,14 @@
 ```toml
 russh = { version = "0.65.2", default-features = false, features = ["ring", "flate2", "rsa"] }
 uuid = { version = "1", features = ["v4"] }
-tokio = { version = "1", features = ["rt-multi-thread", "sync", "time", "net", "io-util", "macros"] }
+tokio = { version = "1", features = [
+  "rt-multi-thread",
+  "sync",
+  "time",
+  "net",
+  "io-util",
+  "macros",
+] }
 ```
 
 ### 4.2 新增 `src/session.rs`
@@ -128,17 +135,17 @@ pub struct HostRecord { id, alias, host, port, username, auth_type }
 
 ## 5. 前端设计（src）
 
-| 文件 | 职责 |
-|---|---|
-| `src/core/term/manager.ts` | xterm 实例池；`mount / dispose / fit / setPassword`；16 ms 上行合并、100 ms resize 节流、WebGL 失败降级 |
-| `src/core/term/manager.ts` 内 `Channel<number[]>` | `onmessage` → `term.write(new Uint8Array(data))` |
-| `src/stores/hosts.ts` | `host_list` 结果缓存 + `load()` |
-| `src/stores/workspace.ts` | `WorkspaceTab` 增加 `hostId?: string`；同主机同类型标签去重 |
-| `src/components/term/TerminalPane.vue` | 单标签容器，`onMounted` 调 `manager.mount`，`onBeforeUnmount` 不销毁（由 App 统一 dispose） |
-| `src/components/host/QuickConnect.vue` | Sheet 表单；`preset` 存在时为「补密码」模式 |
-| `src/components/host/HostTree.vue` | 读取真实主机列表、搜索过滤、双击 `connect`、新建 `create` |
-| `src/components/term/TabBar.vue` | `+` 改为 `emit("new-session")` |
-| `src/App.vue` | 渲染所有 `TerminalPane`（`v-show`）；监听标签删除 → `terminalManager.dispose`；挂 `Toaster` |
+| 文件                                              | 职责                                                                                                    |
+| ------------------------------------------------- | ------------------------------------------------------------------------------------------------------- |
+| `src/core/term/manager.ts`                        | xterm 实例池；`mount / dispose / fit / setPassword`；16 ms 上行合并、100 ms resize 节流、WebGL 失败降级 |
+| `src/core/term/manager.ts` 内 `Channel<number[]>` | `onmessage` → `term.write(new Uint8Array(data))`                                                        |
+| `src/stores/hosts.ts`                             | `host_list` 结果缓存 + `load()`                                                                         |
+| `src/stores/workspace.ts`                         | `WorkspaceTab` 增加 `hostId?: string`；同主机同类型标签去重                                             |
+| `src/components/term/TerminalPane.vue`            | 单标签容器，`onMounted` 调 `manager.mount`，`onBeforeUnmount` 不销毁（由 App 统一 dispose）             |
+| `src/components/host/QuickConnect.vue`            | Sheet 表单；`preset` 存在时为「补密码」模式                                                             |
+| `src/components/host/HostTree.vue`                | 读取真实主机列表、搜索过滤、双击 `connect`、新建 `create`                                               |
+| `src/components/term/TabBar.vue`                  | `+` 改为 `emit("new-session")`                                                                          |
+| `src/App.vue`                                     | 渲染所有 `TerminalPane`（`v-show`）；监听标签删除 → `terminalManager.dispose`；挂 `Toaster`             |
 
 关键行为：
 
