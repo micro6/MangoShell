@@ -2,6 +2,7 @@ mod commands;
 mod db;
 mod keys;
 mod session;
+mod sftp;
 mod terminal;
 
 use commands::{
@@ -9,6 +10,10 @@ use commands::{
 };
 use keys::{key_delete, key_import, key_list};
 use session::SessionManager;
+use sftp::{
+    local_home, local_list, sftp_cancel, sftp_chmod, sftp_close, sftp_delete, sftp_download,
+    sftp_list, sftp_mkdir, sftp_open, sftp_rename, sftp_upload, SftpManager,
+};
 use tauri::Manager;
 use terminal::{term_close, term_open, term_resize, term_write, TerminalManager};
 
@@ -37,6 +42,7 @@ pub fn run() {
             app.manage(AppState {
                 sessions: SessionManager::new(pool.clone()),
                 terminals: TerminalManager::default(),
+                sftp: SftpManager::default(),
                 db: pool,
                 db_path,
             });
@@ -55,7 +61,19 @@ pub fn run() {
             term_open,
             term_write,
             term_resize,
-            term_close
+            term_close,
+            sftp_open,
+            sftp_close,
+            sftp_list,
+            sftp_mkdir,
+            sftp_rename,
+            sftp_delete,
+            sftp_chmod,
+            sftp_download,
+            sftp_upload,
+            sftp_cancel,
+            local_home,
+            local_list
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { Plus, X } from "@lucide/vue";
+import { FolderOpen, Plus, X } from "@lucide/vue";
 import { Button } from "@/components/ui/button";
 import { useWorkspaceStore, type WorkspaceTab } from "@/stores/workspace";
 
@@ -37,6 +37,7 @@ const stateClass = (tab: WorkspaceTab) => {
         @auxclick.middle.prevent="store.closeTab(tab.id)"
       >
         <span class="dot" :class="stateClass(tab)" />
+        <FolderOpen v-if="tab.kind === 'sftp'" :size="12" class="kind" />
         <span class="label">{{ tab.title }}</span>
         <span class="close" @click.stop="store.closeTab(tab.id)">
           <X :size="12" />
@@ -117,6 +118,11 @@ const stateClass = (tab: WorkspaceTab) => {
   height: 6px;
   border-radius: 999px;
   flex: none;
+}
+
+.kind {
+  flex: none;
+  color: var(--muted-foreground);
 }
 
 .label {

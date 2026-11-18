@@ -19,6 +19,8 @@ interface TermEntry {
 
 export interface MountOptions {
   password?: string;
+  /** 首个数据块到达：说明认证通过、远端 shell 已启动 */
+  onReady?: () => void;
   /** 通道结束：正常退出无 error，异常时带上错误信息 */
   onExit?: (error?: string) => void;
 }
@@ -112,7 +114,13 @@ class TerminalManager {
     };
     this.map.set(tabId, entry);
 
+    let ready = false;
     entry.channel.onmessage = (data) => {
+      // 首包即视为会话就绪，标签状态由「连接中」切到「已连接」
+      if (!ready) {
+        ready = true;
+        options.onReady?.();
+      }
       try {
         term.write(new Uint8Array(data));
       } catch (e) {

@@ -29,9 +29,10 @@ log = "0.4"
 anyhow = "1"
 
 # 异步运行时 + SQLite：sqlx 的 sqlite 特性自带 bundled libsqlite3，免去系统依赖
-tokio = { version = "1", features = ["io-util", "macros", "net", "rt-multi-thread", "sync", "time"] }
+tokio = { version = "1", features = ["fs", "io-util", "macros", "net", "rt-multi-thread", "sync", "time"] }
 sqlx = { version = "0.8", default-features = false, features = ["runtime-tokio", "sqlite", "migrate", "macros"] }
 russh = { version = "0.65.2", default-features = false, features = ["ring", "flate2", "rsa"] }
+russh-sftp = "3.0.1"
 uuid = { version = "1.29.3", features = ["v4"] }
 
 

@@ -5,6 +5,7 @@ use std::path::PathBuf;
 use tauri::State;
 
 use crate::session::SessionManager;
+use crate::sftp::SftpManager;
 use crate::terminal::TerminalManager;
 
 /// 全局应用状态，随 Builder::manage 注入
@@ -13,6 +14,7 @@ pub struct AppState {
     pub db_path: PathBuf,
     pub sessions: SessionManager,
     pub terminals: TerminalManager,
+    pub sftp: SftpManager,
 }
 
 #[derive(Serialize)]

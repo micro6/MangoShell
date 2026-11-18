@@ -13,6 +13,7 @@ onMounted(() => {
 
   store.setTabState(props.tab.id, "connecting");
   terminalManager.mount(props.tab.id, props.tab.hostId, hostEl.value, {
+    onReady: () => store.setTabState(props.tab.id, "connected"),
     onExit: (error) => {
       store.setTabState(props.tab.id, error ? "failed" : "lost");
       if (error) toast.error("连接中断", { description: error });

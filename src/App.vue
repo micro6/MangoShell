@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, onMounted, onUnmounted, ref, watch } from "vue";
 import { invoke } from "@tauri-apps/api/core";
-import { FolderPlus, PanelLeft, Plug, Upload } from "@lucide/vue";
+import { FolderOpen, FolderPlus, PanelLeft, Plug, Upload } from "@lucide/vue";
 import { toast } from "vue-sonner";
 import HostTree from "@/components/host/HostTree.vue";
 import HostEditor from "@/components/host/HostEditor.vue";
@@ -9,6 +9,7 @@ import KeyManager from "@/components/host/KeyManager.vue";
 import KnownHosts from "@/components/host/KnownHosts.vue";
 import QuickConnect, { type ConnectPayload } from "@/components/host/QuickConnect.vue";
 import StatusBar from "@/components/common/StatusBar.vue";
+import SftpPane from "@/components/sftp/SftpPane.vue";
 import TabBar from "@/components/term/TabBar.vue";
 import TerminalPane from "@/components/term/TerminalPane.vue";
 import { Button } from "@/components/ui/button";
@@ -30,6 +31,25 @@ import { useWorkspaceStore } from "@/stores/workspace";
 const store = useWorkspaceStore();
 const hosts = useHostsStore();
 const activeTab = computed(() => store.tabs.find((t) => t.id === store.activeId) ?? null);
+
+/** 只有已连接的终端标签才能开 SFTP，复用同一条 SSH 连接 */
+const canOpenSftp = computed(
+  () =>
+    activeTab.value?.kind === "terminal" &&
+    activeTab.value.state === "connected" &&
+    Boolean(activeTab.value.hostId),
+);
+
+function openSftp() {
+  const tab = activeTab.value;
+  if (!tab?.hostId || tab.kind !== "terminal") return;
+  store.openTab({
+    title: `${tab.title} · SFTP`,
+    kind: "sftp",
+    state: "connected",
+    hostId: tab.hostId,
+  });
+}
 
 const sheetOpen = ref(false);
 const preset = ref<HostRecord | null>(null);
@@ -123,12 +143,14 @@ async function handleSubmit(payload: ConnectPayload) {
   sheetOpen.value = false;
 }
 
-// 标签关闭后释放对应的 xterm 实例与通道
+// 标签关闭后释放对应的 xterm 实例；SFTP 由组件卸载时自行关闭会话
 watch(
-  () => store.tabs.map((t) => t.id),
-  (ids, oldIds) => {
-    for (const id of oldIds ?? []) {
-      if (!ids.includes(id)) terminalManager.dispose(id);
+  () => store.tabs.map((t) => ({ id: t.id, kind: t.kind })),
+  (tabs, oldTabs) => {
+    for (const old of oldTabs ?? []) {
+      if (old.kind === "terminal" && !tabs.some((t) => t.id === old.id)) {
+        terminalManager.dispose(old.id);
+      }
     }
   },
 );
@@ -176,6 +198,16 @@ onUnmounted(() => window.removeEventListener("keydown", onKeydown));
             variant="ghost"
             size="icon"
             class="ml-auto h-7 w-7"
+            title="打开 SFTP 文件管理"
+            :disabled="!canOpenSftp"
+            @click="openSftp"
+          >
+            <FolderOpen :size="14" />
+          </Button>
+          <Button
+            variant="ghost"
+            size="icon"
+            class="h-7 w-7"
             title="快速连接"
             @click="openCreate"
           >
@@ -184,13 +216,20 @@ onUnmounted(() => window.removeEventListener("keydown", onKeydown));
         </div>
 
         <div v-if="store.tabs.length" class="term-stack">
-          <TerminalPane
-            v-for="tab in store.tabs"
-            :key="tab.id"
-            v-show="tab.id === store.activeId"
-            :tab="tab"
-            :active="tab.id === store.activeId"
-          />
+          <template v-for="tab in store.tabs" :key="tab.id">
+            <TerminalPane
+              v-if="tab.kind === 'terminal'"
+              v-show="tab.id === store.activeId"
+              :tab="tab"
+              :active="tab.id === store.activeId"
+            />
+            <SftpPane
+              v-else-if="tab.kind === 'sftp'"
+              v-show="tab.id === store.activeId"
+              :tab="tab"
+              :active="tab.id === store.activeId"
+            />
+          </template>
         </div>
 
         <section v-else class="placeholder">
