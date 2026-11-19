@@ -45,7 +45,8 @@ pub fn run() {
         )
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_clipboard_manager::init())
-        .plugin(tauri_plugin_opener::init())
+        .plugin(tauri_plugin_updater::Builder::new().build())
+        .plugin(tauri_plugin_process::init())
         .on_window_event(|window, event| {
             // 关闭窗口时清理该窗口的终端与录制，避免残留远端 shell 和未刷新的日志
             if matches!(event, tauri::WindowEvent::Destroyed) {

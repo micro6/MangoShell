@@ -17,10 +17,10 @@ jobs:
       - uses: actions/checkout@v4
       - uses: pnpm/action-setup@v4
         with:
-          version: 11
+          version: 12.22.0
       - uses: actions/setup-node@v4
         with:
-          node-version: 24
+          node-version: 26.13.1
           cache: pnpm
       - run: pnpm install --frozen-lockfile
       - run: pnpm lint
@@ -41,3 +41,60 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y libwebkit2gtk-4.1-dev libappindicator3-dev librsvg2-dev patchelf
       - run: cargo check --manifest-path src-tauri/Cargo.toml
+
+  e2e:
+    name: e2e (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        # tauri-driver 不支持 macOS，只覆盖 Windows / Linux
+        os: [windows-latest, ubuntu-22.04]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 12.22.0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 26.13.1
+          cache: pnpm
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: src-tauri
+      - name: 安装 Linux 系统依赖
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libwebkit2gtk-4.1-dev libappindicator3-dev librsvg2-dev patchelf webkit2gtk-driver xvfb
+      - run: pnpm install --frozen-lockfile
+      - name: 安装 tauri-driver
+        run: cargo install tauri-driver --locked
+      - name: 构建被测应用（debug，不打包）
+        run: pnpm tauri build --debug --no-bundle
+      - name: 准备 Edge WebDriver
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $edge = "C:\Program Files (x86)\Microsoft\Edge\Application\msedge.exe"
+          $edgeVersion = (Get-Item $edge).VersionInfo.ProductVersion
+          $url = "https://msedgedriver.microsoft.com/$edgeVersion/edgedriver_win64.zip"
+          try {
+            Invoke-WebRequest $url -OutFile "$env:RUNNER_TEMP\edgedriver.zip"
+          } catch {
+            # 精确版本缺失时退回该主版本的最新驱动
+            $major = $edgeVersion.Split('.')[0]
+            $raw = (Invoke-WebRequest "https://msedgedriver.microsoft.com/LATEST_RELEASE_$major").Content
+            $text = if ($raw -is [byte[]]) { [Text.Encoding]::Unicode.GetString($raw) } else { [string]$raw }
+            $driverVersion = ($text -replace '[^\d\.]', '')
+            Invoke-WebRequest "https://msedgedriver.microsoft.com/$driverVersion/edgedriver_win64.zip" -OutFile "$env:RUNNER_TEMP\edgedriver.zip"
+          }
+          Expand-Archive "$env:RUNNER_TEMP\edgedriver.zip" -DestinationPath "$env:RUNNER_TEMP\edgedriver" -Force
+          "MSEDGEDRIVER_PATH=$env:RUNNER_TEMP\edgedriver\msedgedriver.exe" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+      - name: 运行 E2E（Windows）
+        if: runner.os == 'Windows'
+        run: pnpm e2e
+      - name: 运行 E2E（Linux，虚拟显示）
+        if: runner.os == 'Linux'
+        run: xvfb-run -a pnpm e2e

@@ -12,6 +12,9 @@ dist
 dist-ssr
 *.local
 
+# 更新签名私钥，绝不入库
+.tauri-keys/
+
 # Trae 临时分享产物
 .trae-html-share-packages/
 

@@ -1,5 +1,9 @@
 allowBuilds:
   "@parcel/watcher": false
+  esbuild: true
+  # E2E 只用 Edge/WebKit，不需要 Firefox 驱动
+  geckodriver: false
+  edgedriver: true
 catalog:
   vite: npm:@voidzero-dev/vite-plus-core@8.3.8000
   vite-plus: 1.7.0
