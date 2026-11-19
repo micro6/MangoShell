@@ -6,6 +6,7 @@ use tauri::State;
 
 use crate::forward::ForwardManager;
 use crate::record::RecordingManager;
+use crate::secrets;
 use crate::session::SessionManager;
 use crate::sftp::SftpManager;
 use crate::terminal::TerminalManager;
@@ -172,12 +173,49 @@ pub async fn host_save(
 
 #[tauri::command]
 pub async fn host_delete(state: State<'_, AppState>, id: String) -> Result<(), String> {
+    // 主机删除时一并清理已保存的登录密码，失败只记录日志不阻塞删除
+    let host_id = id.clone();
+    let cleared =
+        tauri::async_runtime::spawn_blocking(move || secrets::delete_host_password(&host_id)).await;
+    let cleared = match cleared {
+        Ok(result) => result,
+        Err(e) => Err(e.to_string()),
+    };
+    if let Err(e) = cleared {
+        log::warn!("删除主机 {id} 的已保存密码失败: {e}");
+    }
+
     sqlx::query("DELETE FROM host WHERE id = ?1")
         .bind(&id)
         .execute(&state.db)
         .await
         .map_err(|e| e.to_string())?;
     Ok(())
+}
+
+/// 记住密码：把登录密码写入系统密钥环
+#[tauri::command]
+pub async fn host_password_set(host_id: String, password: String) -> Result<(), String> {
+    tauri::async_runtime::spawn_blocking(move || secrets::save_host_password(&host_id, &password))
+        .await
+        .map_err(|e| format!("写入系统密钥环失败: {e}"))?
+}
+
+/// 取消记住密码：删除系统密钥环中的条目
+#[tauri::command]
+pub async fn host_password_clear(host_id: String) -> Result<(), String> {
+    tauri::async_runtime::spawn_blocking(move || secrets::delete_host_password(&host_id))
+        .await
+        .map_err(|e| format!("删除系统密钥环条目失败: {e}"))?
+}
+
+/// 查询主机是否已保存密码；不返回密码本身
+#[tauri::command]
+pub async fn host_password_exists(host_id: String) -> Result<bool, String> {
+    tauri::async_runtime::spawn_blocking(move || secrets::load_host_password(&host_id))
+        .await
+        .map_err(|e| format!("读取系统密钥环失败: {e}"))?
+        .map(|password| password.is_some())
 }
 
 /// 已知主机列表：指纹由存储的 key_blob 现算，不额外落库

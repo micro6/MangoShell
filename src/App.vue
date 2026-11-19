@@ -8,7 +8,6 @@ import HostTree from "@/components/host/HostTree.vue";
 import HostEditor from "@/components/host/HostEditor.vue";
 import KeyManager from "@/components/host/KeyManager.vue";
 import KnownHosts from "@/components/host/KnownHosts.vue";
-import QuickConnect, { type ConnectPayload } from "@/components/host/QuickConnect.vue";
 import StatusBar from "@/components/common/StatusBar.vue";
 import ForwardPane from "@/components/forward/ForwardPane.vue";
 import SftpPane from "@/components/sftp/SftpPane.vue";
@@ -70,17 +69,23 @@ function openForward() {
   });
 }
 
-const sheetOpen = ref(false);
-const preset = ref<HostRecord | null>(null);
-const editorOpen = ref(false);
-const editorHost = ref<HostRecord | null>(null);
+type HostSheetMode = "create" | "edit" | "connect" | "quick";
+
+const hostSheetOpen = ref(false);
+const hostSheetMode = ref<HostSheetMode>("create");
+const hostSheetHost = ref<HostRecord | null>(null);
 const keysOpen = ref(false);
 const knownHostsOpen = ref(false);
 const deleteTarget = ref<HostRecord | null>(null);
 
+function openHostSheet(mode: HostSheetMode, host: HostRecord | null = null) {
+  hostSheetMode.value = mode;
+  hostSheetHost.value = host;
+  hostSheetOpen.value = true;
+}
+
 function openCreate() {
-  preset.value = null;
-  sheetOpen.value = true;
+  openHostSheet("quick");
 }
 
 /** 新建独立窗口：每个窗口有自己的标签工作区，共用同一份主机与连接池 */
@@ -99,25 +104,54 @@ function openWindow() {
 }
 
 function openConnect(host: HostRecord) {
-  preset.value = host;
-  sheetOpen.value = true;
+  openHostSheet("connect", host);
 }
 
 function openEditor(host: HostRecord | null) {
-  editorHost.value = host;
-  editorOpen.value = true;
+  openHostSheet(host ? "edit" : "create", host);
 }
 
-/** 密钥主机直接建连，不再弹密码框 */
-function handleConnect(host: HostRecord) {
-  if (host.authType === "key") {
-    store.openTab({
-      title: host.alias,
-      kind: "terminal",
-      state: "connecting",
-      hostId: host.id,
-    });
+/** 打开终端标签；密码只交给终端管理器，尽早清除 */
+function openTerminal(host: HostRecord, password?: string) {
+  if (password) terminalManager.setPassword(host.id, password);
+  const before = store.tabs.length;
+  store.openTab({
+    title: host.alias,
+    kind: "terminal",
+    state: "connecting",
+    hostId: host.id,
+  });
+  // 已存在同主机标签时不会新建，密码不应残留
+  if (store.tabs.length === before) terminalManager.clearPassword(host.id);
+}
+
+/** 密钥主机或已保存密码的主机直接建连，否则才弹密码表单 */
+async function handleConnect(host: HostRecord) {
+  // 已有可用的同主机终端时只切换标签，不再走连接逻辑
+  const existing = store.tabs.find((t) => t.hostId === host.id && t.kind === "terminal");
+  if (
+    existing &&
+    (existing.state === "connected" ||
+      existing.state === "connecting" ||
+      existing.state === "authenticating")
+  ) {
+    store.activate(existing.id);
     return;
+  }
+
+  if (host.authType === "key") {
+    openTerminal(host);
+    return;
+  }
+
+  try {
+    const saved = await invoke<boolean>("host_password_exists", { hostId: host.id });
+    if (saved) {
+      openTerminal(host);
+      return;
+    }
+  } catch {
+    // 系统钥匙串不可用时回退到手动输入
   }
   openConnect(host);
 }
@@ -143,38 +177,8 @@ async function confirmDeleteHost() {
   }
 }
 
-async function handleSubmit(payload: ConnectPayload) {
-  let host = preset.value;
-  if (!host) {
-    try {
-      host = await invoke<HostRecord>("host_save", {
-        id: null,
-        alias: payload.alias,
-        host: payload.host,
-        port: payload.port,
-        username: payload.username,
-        authType: "password",
-        keyId: null,
-      });
-    } catch (e) {
-      toast.error("保存主机失败", { description: String(e) });
-      return;
-    }
-    void hosts.load().catch(() => {});
-  }
-
-  if (payload.password) terminalManager.setPassword(host.id, payload.password);
-  const before = store.tabs.length;
-  store.openTab({
-    title: host.alias,
-    kind: "terminal",
-    state: "connecting",
-    hostId: host.id,
-  });
-  // 已存在同主机标签时不会新建，密码不应残留
-  if (store.tabs.length === before) terminalManager.clearPassword(host.id);
-
-  sheetOpen.value = false;
+function handleConnectRequest({ host, password }: { host: HostRecord; password?: string }) {
+  openTerminal(host, password);
 }
 
 // 标签关闭后释放对应的 xterm 实例；SFTP 由组件卸载时自行关闭会话
@@ -297,8 +301,13 @@ onUnmounted(() => window.removeEventListener("keydown", onKeydown));
 
     <StatusBar />
 
-    <QuickConnect v-model:open="sheetOpen" :preset="preset" @submit="handleSubmit" />
-    <HostEditor v-model:open="editorOpen" :preset="editorHost" @saved="handleHostSaved" />
+    <HostEditor
+      v-model:open="hostSheetOpen"
+      :mode="hostSheetMode"
+      :preset="hostSheetHost"
+      @saved="handleHostSaved"
+      @connect="handleConnectRequest"
+    />
     <KeyManager v-model:open="keysOpen" />
     <KnownHosts v-model:open="knownHostsOpen" />
 

@@ -1,8 +1,8 @@
-//! 私钥正文的 OS Keyring 存储。
+//! SSH 私钥与主机登录密码的 OS Keyring 存储。
 //!
 //! SQLite 只保留密钥元数据（`ssh_key.secret_ref` 指向 Keyring 条目），
-//! 私钥本体写入 Windows 凭据管理器 / macOS Keychain / Linux Secret Service。
-//! 旧版本把私钥正文存在 `ssh_key.private_key`，启动时会一次性迁移。
+//! 私钥本体与「记住密码」的登录密码写入 Windows 凭据管理器 / macOS Keychain /
+//! Linux Secret Service。旧版本把私钥正文存在 `ssh_key.private_key`，启动时会一次性迁移。
 //!
 //! Windows 凭据管理器单条正文上限 2560 字节，RSA 4096 的 PEM 会超限，
 //! 因此按固定大小分块：第 0 块带块数头部，其余块只存正文。
@@ -12,6 +12,10 @@ use sqlx::SqlitePool;
 
 /// Keyring 中的服务名，凭据管理器里显示为 MangoShell
 const SERVICE: &str = "MangoShell";
+/// 登录私钥的条目命名空间
+const KEY_NAMESPACE: &str = "ssh-key";
+/// 主机登录密码的条目命名空间
+const PASSWORD_NAMESPACE: &str = "host-password";
 /// 旧版本的 secret_ref 前缀：正文直接存在 SQLite
 const LEGACY_REF_PREFIX: &str = "db:";
 /// 每块正文上限，留出头部与平台编码的余量（Windows 上限 2560）
@@ -29,11 +33,12 @@ pub fn is_legacy_ref(secret_ref: &str) -> bool {
     secret_ref.starts_with(LEGACY_REF_PREFIX)
 }
 
-fn entry(id: &str, index: usize) -> Result<Entry, String> {
+/// 密钥环条目命名空间：SSH 私钥正文 / 主机登录密码
+fn entry(namespace: &str, id: &str, index: usize) -> Result<Entry, String> {
     let account = if index == 0 {
-        format!("ssh-key:{id}")
+        format!("{namespace}:{id}")
     } else {
-        format!("ssh-key:{id}#{index}")
+        format!("{namespace}:{id}#{index}")
     };
     Entry::new(SERVICE, &account).map_err(|e| describe(&e))
 }
@@ -44,7 +49,7 @@ fn describe(err: &Error) -> String {
         Error::NoStorageAccess(e) => format!("无法访问系统密钥环: {e}"),
         Error::PlatformFailure(e) => format!("系统密钥环操作失败: {e}"),
         Error::TooLong(field, limit) => {
-            format!("私钥超出系统密钥环单条容量上限（{field} 上限 {limit} 字节）")
+            format!("内容超出系统密钥环单条容量上限（{field} 上限 {limit} 字节）")
         }
         other => format!("系统密钥环操作失败: {other}"),
     }
@@ -85,32 +90,60 @@ fn join_chunks(chunks: &[Vec<u8>]) -> Result<String, String> {
         bytes.extend_from_slice(chunk);
     }
     String::from_utf8(bytes)
-        .map_err(|_| "系统密钥环中的私钥数据已损坏，请重新导入该密钥".to_string())
+        .map_err(|_| "系统密钥环中的数据已损坏，请重新保存".to_string())
 }
 
 /// 写入私钥正文；同 id 重复写入会覆盖旧条目
 pub fn save(id: &str, pem: &str) -> Result<(), String> {
-    let chunks = encode_chunks(pem);
+    save_value(KEY_NAMESPACE, id, pem)
+}
+
+/// 读取私钥正文；条目不存在时返回 None
+pub fn load(id: &str) -> Result<Option<String>, String> {
+    load_value(KEY_NAMESPACE, id)
+}
+
+/// 删除私钥正文；条目本就不存在时视为成功
+pub fn delete(id: &str) -> Result<(), String> {
+    delete_value(KEY_NAMESPACE, id)
+}
+
+/// 保存主机登录密码；调用方负责在用户取消「记住密码」时删除
+pub fn save_host_password(host_id: &str, password: &str) -> Result<(), String> {
+    save_value(PASSWORD_NAMESPACE, host_id, password)
+}
+
+/// 读取主机登录密码；未保存时返回 None
+pub fn load_host_password(host_id: &str) -> Result<Option<String>, String> {
+    load_value(PASSWORD_NAMESPACE, host_id)
+}
+
+/// 删除主机登录密码；未保存时视为成功
+pub fn delete_host_password(host_id: &str) -> Result<(), String> {
+    delete_value(PASSWORD_NAMESPACE, host_id)
+}
+
+fn save_value(namespace: &str, id: &str, value: &str) -> Result<(), String> {
+    let chunks = encode_chunks(value);
     // 先写后续块，最后写首块作为提交点，避免读到半截数据
     for index in (1..chunks.len()).rev() {
-        if let Err(e) = entry(id, index)?.set_secret(&chunks[index]) {
+        if let Err(e) = entry(namespace, id, index)?.set_secret(&chunks[index]) {
             // 清理已写入的块，避免残留
             for leftover in 0..chunks.len() {
-                if let Ok(item) = entry(id, leftover) {
+                if let Ok(item) = entry(namespace, id, leftover) {
                     let _ = item.delete_credential();
                 }
             }
             return Err(describe(&e));
         }
     }
-    entry(id, 0)?
+    entry(namespace, id, 0)?
         .set_secret(&chunks[0])
         .map_err(|e| describe(&e))
 }
 
-/// 读取私钥正文；条目不存在时返回 None
-pub fn load(id: &str) -> Result<Option<String>, String> {
-    let first = match entry(id, 0)?.get_secret() {
+fn load_value(namespace: &str, id: &str) -> Result<Option<String>, String> {
+    let first = match entry(namespace, id, 0)?.get_secret() {
         Ok(bytes) => bytes,
         Err(Error::NoEntry) => return Ok(None),
         Err(e) => return Err(describe(&e)),
@@ -123,10 +156,10 @@ pub fn load(id: &str) -> Result<Option<String>, String> {
 
     let mut chunks = vec![first];
     for index in 1..total {
-        match entry(id, index)?.get_secret() {
+        match entry(namespace, id, index)?.get_secret() {
             Ok(bytes) => chunks.push(bytes),
             Err(Error::NoEntry) => {
-                return Err("系统密钥环中的私钥数据不完整，请重新导入该密钥".to_string())
+                return Err("系统密钥环中的数据不完整，请重新保存".to_string())
             }
             Err(e) => return Err(describe(&e)),
         }
@@ -134,16 +167,15 @@ pub fn load(id: &str) -> Result<Option<String>, String> {
     join_chunks(&chunks).map(Some)
 }
 
-/// 删除私钥正文；条目本就不存在时视为成功
-pub fn delete(id: &str) -> Result<(), String> {
-    let total = match entry(id, 0)?.get_secret() {
+fn delete_value(namespace: &str, id: &str) -> Result<(), String> {
+    let total = match entry(namespace, id, 0)?.get_secret() {
         Ok(bytes) => parse_header(&bytes).map(|(total, _)| total).unwrap_or(1),
         Err(Error::NoEntry) => return Ok(()),
         Err(e) => return Err(describe(&e)),
     };
 
     for index in 0..total {
-        match entry(id, index)?.delete_credential() {
+        match entry(namespace, id, index)?.delete_credential() {
             Ok(()) | Err(Error::NoEntry) => {}
             Err(e) => return Err(describe(&e)),
         }

@@ -85,13 +85,24 @@ impl SessionManager {
         } else {
             let password = match password {
                 Some(p) if !p.is_empty() => p.to_string(),
-                _ => self
-                    .passwords
-                    .read()
-                    .await
-                    .get(host_id)
-                    .cloned()
-                    .ok_or_else(|| anyhow!("请输入登录密码"))?,
+                _ => {
+                    let cached = self.passwords.read().await.get(host_id).cloned();
+                    match cached {
+                        Some(p) => p,
+                        // 本进程没缓存时回退到「记住密码」写入的系统钥匙串
+                        None => {
+                            let host_id = host_id.to_string();
+                            tauri::async_runtime::spawn_blocking(move || {
+                                secrets::load_host_password(&host_id)
+                            })
+                            .await
+                            .map_err(|e| anyhow!("读取系统密钥环失败: {e}"))?
+                            .map_err(|e| anyhow!(e))?
+                            .filter(|p| !p.is_empty())
+                            .ok_or_else(|| anyhow!("请输入登录密码"))?
+                        }
+                    }
+                }
             };
             let handle = self
                 .connect(&row.host, row.port as u16, &row.username, &password)

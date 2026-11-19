@@ -11,7 +11,8 @@ mod terminal;
 use std::sync::Arc;
 
 use commands::{
-    app_health, host_delete, host_list, host_save, known_host_delete, known_host_list, AppState,
+    app_health, host_delete, host_list, host_password_clear, host_password_exists,
+    host_password_set, host_save, known_host_delete, known_host_list, AppState,
 };
 use forward::{
     forward_delete, forward_list, forward_save, forward_start, forward_stats, forward_stop,
@@ -81,6 +82,9 @@ pub fn run() {
             host_list,
             host_save,
             host_delete,
+            host_password_set,
+            host_password_clear,
+            host_password_exists,
             known_host_list,
             known_host_delete,
             key_list,
