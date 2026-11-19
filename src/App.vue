@@ -1,7 +1,8 @@
 <script setup lang="ts">
 import { computed, onMounted, onUnmounted, ref, watch } from "vue";
 import { invoke } from "@tauri-apps/api/core";
-import { FolderOpen, FolderPlus, PanelLeft, Plug, Upload, Waypoints } from "@lucide/vue";
+import { WebviewWindow } from "@tauri-apps/api/webviewWindow";
+import { AppWindow, FolderOpen, FolderPlus, PanelLeft, Plug, Upload, Waypoints } from "@lucide/vue";
 import { toast } from "vue-sonner";
 import HostTree from "@/components/host/HostTree.vue";
 import HostEditor from "@/components/host/HostEditor.vue";
@@ -80,6 +81,21 @@ const deleteTarget = ref<HostRecord | null>(null);
 function openCreate() {
   preset.value = null;
   sheetOpen.value = true;
+}
+
+/** 新建独立窗口：每个窗口有自己的标签工作区，共用同一份主机与连接池 */
+function openWindow() {
+  const win = new WebviewWindow(`window-${crypto.randomUUID()}`, {
+    title: "MangoShell",
+    width: 1280,
+    height: 800,
+    minWidth: 960,
+    minHeight: 600,
+    center: true,
+  });
+  win.once("tauri://error", (event) => {
+    toast.error("新建窗口失败", { description: String(event.payload) });
+  });
 }
 
 function openConnect(host: HostRecord) {
@@ -234,6 +250,9 @@ onUnmounted(() => window.removeEventListener("keydown", onKeydown));
           </Button>
           <Button variant="ghost" size="icon" class="h-7 w-7" title="快速连接" @click="openCreate">
             <Plug :size="14" />
+          </Button>
+          <Button variant="ghost" size="icon" class="h-7 w-7" title="新建窗口" @click="openWindow">
+            <AppWindow :size="14" />
           </Button>
         </div>
 

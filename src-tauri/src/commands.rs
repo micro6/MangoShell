@@ -5,6 +5,7 @@ use std::path::PathBuf;
 use tauri::State;
 
 use crate::forward::ForwardManager;
+use crate::record::RecordingManager;
 use crate::session::SessionManager;
 use crate::sftp::SftpManager;
 use crate::terminal::TerminalManager;
@@ -17,6 +18,7 @@ pub struct AppState {
     pub terminals: TerminalManager,
     pub sftp: SftpManager,
     pub forwards: ForwardManager,
+    pub recordings: RecordingManager,
 }
 
 #[derive(Serialize)]

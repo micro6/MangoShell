@@ -13,8 +13,8 @@ export interface WorkspaceTab {
   hostId?: string;
 }
 
-let seq = 0;
-const nextId = () => `tab-${++seq}`;
+/** 多窗口下标签 id 必须全局唯一，否则后端终端表会互相覆盖 */
+const nextId = () => `tab-${crypto.randomUUID()}`;
 
 /** 工作区只保存标签元数据，终端缓冲等重状态由 TerminalManager 持有 */
 export const useWorkspaceStore = defineStore("workspace", () => {

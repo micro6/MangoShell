@@ -18,7 +18,9 @@
 
 ## 2. 安全与存储决策
 
-- 私钥正文存放在本机 SQLite（`ssh_key.private_key`）。导入加密私钥时用口令解密后保存**已解密**的 OpenSSH PEM；口令本身不保存，连接时无需再次输入。
+- 私钥正文存放在 **OS Keyring**（Windows Credential Manager / macOS Keychain / Linux Secret Service），SQLite 的 `ssh_key` 只保留元数据，`secret_ref` 记录 Keyring 条目名。导入加密私钥时用口令解密后保存**已解密**的 OpenSSH PEM；口令本身不保存，连接时无需再次输入。
+- Windows 单条凭据上限 2560 字节，RSA 4096 的 PEM 会超限，正文按 2000 字节分块写入，首块携带块数头部。
+- 旧版本留在 `ssh_key.private_key` 的正文在启动时迁移到 Keyring，成功后清空该列；迁移失败保留原值并在下次启动重试，连接时仍可回退读取。
 - 私钥正文**不出现在任何 IPC 返回值**中；`KeyRecord` 只含元数据与公钥。
 - 密码仍只存 Rust 进程内存（M1 现状），不落库。
 - known_hosts 删除即删除本地信任记录，下次连接重新 TOFU 写入。
@@ -40,15 +42,15 @@ ALTER TABLE ssh_key ADD COLUMN private_key TEXT NOT NULL DEFAULT '';
   2. `PrivateKey::from_openssh`，失败返回「仅支持 OpenSSH 格式私钥」；
   3. `is_encrypted()` 时必须提供 `passphrase`，`decrypt()` 失败返回「私钥口令不正确」；
   4. `public_key().to_openssh()`、`fingerprint(HashAlg::Sha256)`、`algorithm().as_str()`；
-  5. `to_openssh(LineEnding::LF)` 得到明文 PEM 写入 `private_key`；
-  6. 指纹已存在则拒绝（「该密钥已导入」）；`secret_ref` 写 `db:{id}`。
-- `key_delete(state, id)`: 若 `host.key_id` 仍引用则返回错误并给出主机数；否则删除。
+  5. `to_openssh(LineEnding::LF)` 得到明文 PEM 写入 OS Keyring（`src-tauri/src/secrets.rs`）；
+  6. 指纹已存在则拒绝（「该密钥已导入」）；`secret_ref` 写 `keyring:{id}`，`private_key` 留空。
+- `key_delete(state, id)`: 若 `host.key_id` 仍引用则返回错误并给出主机数；否则先删 Keyring 条目再删元数据。
 
 ### 3.3 修改 `src-tauri/src/session.rs`
 
 - `HostRow` 增加 `auth_type: String`、`key_id: Option<String>`，查询同步补列。
 - `acquire(host_id, password)` 按 `auth_type` 分支：
-  - `key`：要求 `key_id` 存在，从 `ssh_key.private_key` 读 PEM，解析后走 `connect_with_key`；失败信息为「密钥认证失败：请确认公钥已加入远端 authorized_keys」；
+  - `key`：要求 `key_id` 存在，按 `secret_ref` 从 OS Keyring 读 PEM（`db:` 旧引用回退读 `ssh_key.private_key`），解析后走 `connect_with_key`；失败信息为「密钥认证失败：请确认公钥已加入远端 authorized_keys」；
   - 其他：沿用密码分支与内存密码缓存。
 - 新增 `connect_with_key(host, port, username, PrivateKey)`：复用 `client::connect`，RSA 时先 `best_supported_rsa_hash()`，再 `authenticate_publickey(username, PrivateKeyWithHashAlg::new(Arc::new(key), hash_alg))`。
 - 抽出 `fn client_config() -> Arc<client::Config>` 供两种认证共用（keepalive 30s / keepalive_max 3 / nodelay）。
@@ -126,5 +128,5 @@ ALTER TABLE ssh_key ADD COLUMN private_key TEXT NOT NULL DEFAULT '';
 
 ## 6. 风险
 
-- RSA 2048/4096 私钥明文入库体积可达数 KB，SQLite 无压力；后续如需更强保护可迁移到 keyring + 主密码加密。
+- Keyring 单条容量有限（Windows 2560 字节），已分块存储；如后续引入便携模式，可在此基础上加主密码加密 vault。
 - 右键菜单为自绘实现，需确保滚动/窗口缩放后定位正确（关闭后不残留）。

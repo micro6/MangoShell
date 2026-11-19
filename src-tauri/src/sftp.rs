@@ -24,17 +24,42 @@ const PROGRESS_INTERVAL: Duration = Duration::from_millis(150);
 pub struct SftpManager {
     /// tab_id → SFTP 会话（每个标签独立通道）
     sessions: RwLock<HashMap<String, Arc<SftpSession>>>,
+    /// tab_id → 所属窗口标签，窗口关闭时按窗口清理
+    windows: RwLock<HashMap<String, String>>,
     /// transfer_id → 取消标志
     cancels: Mutex<HashMap<String, Arc<AtomicBool>>>,
 }
 
 impl SftpManager {
-    async fn insert(&self, tab_id: String, session: Arc<SftpSession>) {
+    async fn insert(&self, tab_id: String, window: &str, session: Arc<SftpSession>) {
+        self.windows
+            .write()
+            .await
+            .insert(tab_id.clone(), window.to_string());
         self.sessions.write().await.insert(tab_id, session);
     }
 
     async fn take(&self, tab_id: &str) -> Option<Arc<SftpSession>> {
+        self.windows.write().await.remove(tab_id);
         self.sessions.write().await.remove(tab_id)
+    }
+
+    /// 关闭某个窗口下的全部 SFTP 会话，避免多窗口关闭后通道残留
+    pub async fn close_window(&self, window: &str) {
+        let tab_ids: Vec<String> = {
+            let windows = self.windows.read().await;
+            windows
+                .iter()
+                .filter(|(_, label)| label.as_str() == window)
+                .map(|(tab_id, _)| tab_id.clone())
+                .collect()
+        };
+
+        for tab_id in tab_ids {
+            if let Some(session) = self.take(&tab_id).await {
+                let _ = tokio::time::timeout(Duration::from_secs(2), session.close()).await;
+            }
+        }
     }
 
     async fn session(&self, tab_id: &str) -> Result<Arc<SftpSession>, String> {
@@ -94,6 +119,7 @@ pub struct LocalEntry {
 #[tauri::command]
 pub async fn sftp_open(
     state: State<'_, AppState>,
+    window: tauri::WebviewWindow,
     tab_id: String,
     host_id: String,
     password: Option<String>,
@@ -127,7 +153,10 @@ pub async fn sftp_open(
         .await
         .unwrap_or_else(|_| "/".to_string());
 
-    state.sftp.insert(tab_id, Arc::new(session)).await;
+    state
+        .sftp
+        .insert(tab_id, window.label(), Arc::new(session))
+        .await;
     log::info!("SFTP 会话已建立，home={home}");
     Ok(SftpOpenResult { home })
 }

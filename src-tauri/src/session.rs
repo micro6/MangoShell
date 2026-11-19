@@ -11,6 +11,7 @@ use tokio::net::TcpStream;
 use tokio::sync::RwLock;
 
 use crate::forward::{bridge, ForwardRegistry};
+use crate::secrets;
 
 const KEEPALIVE_INTERVAL: Duration = Duration::from_secs(30);
 const KEEPALIVE_MAX: usize = 3;
@@ -142,21 +143,37 @@ impl SessionManager {
         Ok(handle)
     }
 
-    /// 使用主机绑定的私钥认证；私钥正文在连接时从本机库读取
+    /// 使用主机绑定的私钥认证；私钥正文从系统密钥环读取，旧版记录回退到 SQLite
     async fn connect_by_key(&self, row: &HostRow) -> anyhow::Result<Handle<HostKeyVerifier>> {
         let key_id = row
             .key_id
             .as_deref()
             .ok_or_else(|| anyhow!("该主机使用密钥认证，但尚未选择密钥"))?;
 
-        let pem: Option<String> =
-            sqlx::query_scalar("SELECT private_key FROM ssh_key WHERE id = ?1")
-                .bind(key_id)
-                .fetch_optional(&self.pool)
+        let record: Option<(String, String)> = sqlx::query_as(
+            "SELECT secret_ref, private_key FROM ssh_key WHERE id = ?1",
+        )
+        .bind(key_id)
+        .fetch_optional(&self.pool)
+        .await
+        .context("读取登录密钥失败")?;
+        let (secret_ref, legacy_pem) =
+            record.ok_or_else(|| anyhow!("登录密钥不存在，请重新导入"))?;
+
+        let keyring_pem = if secrets::is_legacy_ref(&secret_ref) {
+            None
+        } else {
+            let key_id = key_id.to_string();
+            tauri::async_runtime::spawn_blocking(move || secrets::load(&key_id))
                 .await
-                .context("读取登录密钥失败")?;
-        let pem = pem
+                .map_err(|e| anyhow!("读取系统密钥环失败: {e}"))?
+                .map_err(|e| anyhow!(e))?
+        };
+
+        let pem = keyring_pem
             .filter(|s| !s.is_empty())
+            // 迁移中断时 SQLite 里可能仍留着正文，保证连接可用
+            .or_else(|| Some(legacy_pem).filter(|s| !s.is_empty()))
             .ok_or_else(|| anyhow!("登录密钥不存在，请重新导入"))?;
 
         let key = PrivateKey::from_openssh(pem.as_bytes()).context("解析登录密钥失败")?;

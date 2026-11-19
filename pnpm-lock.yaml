@@ -284,6 +284,9 @@ importers:
       vite-plus:
         specifier: 'catalog:'
         version: 1.7.0(@types/node@26.6.6)(@vitest/ui@5.1.0)(@volar/typescript@2.4.30(typescript@6.0.3))(@vue/language-core@3.3.14)(jiti@2.7.0)(sass-embedded@1.108.2)(sass@1.108.2)(stylus@0.57.0(supports-color@8.1.1))(typescript@6.0.3)(vue-tsc@3.3.14(typescript@6.0.3))
+      vitest:
+        specifier: 5.1.0
+        version: 5.1.0(@types/node@26.6.6)(@vitest/browser-preview@5.1.0)(@vitest/ui@5.1.0)(@voidzero-dev/vite-plus-core@8.3.8000(@types/node@26.6.6)(@volar/typescript@2.4.30(typescript@6.0.3))(@vue/language-core@3.3.14)(jiti@2.7.0)(sass-embedded@1.108.2)(sass@1.108.2)(stylus@0.57.0(supports-color@8.1.1))(typescript@6.0.3)(vue-tsc@3.3.14(typescript@6.0.3)))
       vue-tsc:
         specifier: ^3.3.5
         version: 3.3.14(typescript@6.0.3)

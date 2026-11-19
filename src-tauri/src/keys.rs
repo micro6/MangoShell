@@ -4,6 +4,7 @@ use serde::Serialize;
 use tauri::State;
 
 use crate::commands::AppState;
+use crate::secrets;
 
 /// 密钥元数据：只返回元数据与公钥，私钥正文绝不出现在 IPC 返回值里
 #[derive(Serialize, sqlx::FromRow)]
@@ -81,22 +82,37 @@ pub async fn key_import(
         .map(|d| d.as_secs() as i64)
         .unwrap_or_default();
 
-    sqlx::query(
+    // 私钥正文只进系统密钥环，SQLite 仅保留元数据
+    let stored = {
+        let id = id.clone();
+        let pem = private_pem.clone();
+        tauri::async_runtime::spawn_blocking(move || secrets::save(&id, &pem))
+    }
+    .await
+    .map_err(|e| format!("写入系统密钥环失败: {e}"))?;
+    stored?;
+
+    let inserted = sqlx::query(
         "INSERT INTO ssh_key
            (id, name, key_type, bits, public_key, fingerprint, secret_ref, private_key, created_at)
-         VALUES (?1, ?2, ?3, NULL, ?4, ?5, ?6, ?7, ?8)",
+         VALUES (?1, ?2, ?3, NULL, ?4, ?5, ?6, '', ?7)",
     )
     .bind(&id)
     .bind(&name)
     .bind(&key_type)
     .bind(&public_key)
     .bind(&fingerprint)
-    .bind(format!("db:{id}"))
-    .bind(&*private_pem)
+    .bind(secrets::secret_ref(&id))
     .bind(created_at)
     .execute(&state.db)
-    .await
-    .map_err(|e| e.to_string())?;
+    .await;
+
+    if let Err(e) = inserted {
+        // 元数据没写成功就不能留下孤立的密钥条目
+        let id = id.clone();
+        let _ = tauri::async_runtime::spawn_blocking(move || secrets::delete(&id)).await;
+        return Err(e.to_string());
+    }
 
     log::info!("已导入 SSH 密钥: {name} ({key_type}) {fingerprint}");
     Ok(KeyRecord {
@@ -118,6 +134,24 @@ pub async fn key_delete(state: State<'_, AppState>, id: String) -> Result<(), St
         .map_err(|e| e.to_string())?;
     if used > 0 {
         return Err(format!("该密钥仍被 {used} 台主机使用，请先修改主机认证方式"));
+    }
+
+    let secret_ref: Option<String> =
+        sqlx::query_scalar("SELECT secret_ref FROM ssh_key WHERE id = ?1")
+            .bind(&id)
+            .fetch_optional(&state.db)
+            .await
+            .map_err(|e| e.to_string())?;
+    let Some(secret_ref) = secret_ref else {
+        return Ok(());
+    };
+
+    // 先删密钥环再删元数据，避免正文残留；旧版 db: 引用没有 Keyring 条目
+    if !secrets::is_legacy_ref(&secret_ref) {
+        let id = id.clone();
+        tauri::async_runtime::spawn_blocking(move || secrets::delete(&id))
+            .await
+            .map_err(|e| format!("删除系统密钥环条目失败: {e}"))??;
     }
 
     sqlx::query("DELETE FROM ssh_key WHERE id = ?1")
