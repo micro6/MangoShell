@@ -207,7 +207,7 @@ onUnmounted(() => window.removeEventListener("keydown", onKeydown));
 
 <template>
   <div class="app">
-    <TabBar @new-session="openCreate" />
+    <TabBar />
 
     <div class="body">
       <HostTree

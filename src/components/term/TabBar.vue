@@ -1,9 +1,7 @@
 <script setup lang="ts">
-import { FolderOpen, Plus, Waypoints, X } from "@lucide/vue";
-import { Button } from "@/components/ui/button";
+import { FolderOpen, Waypoints, X } from "@lucide/vue";
 import { useWorkspaceStore, type WorkspaceTab } from "@/stores/workspace";
 
-const emit = defineEmits<{ "new-session": [] }>();
 const store = useWorkspaceStore();
 
 const stateClass = (tab: WorkspaceTab) => {
@@ -44,18 +42,6 @@ const stateClass = (tab: WorkspaceTab) => {
           <X :size="12" />
         </span>
       </button>
-    </div>
-
-    <div class="actions">
-      <Button
-        variant="ghost"
-        size="icon"
-        class="h-7 w-7"
-        title="新建终端标签"
-        @click="emit('new-session')"
-      >
-        <Plus :size="14" />
-      </Button>
     </div>
   </div>
 </template>
@@ -148,15 +134,5 @@ const stateClass = (tab: WorkspaceTab) => {
   .tab--active & {
     opacity: 1;
   }
-}
-
-.actions {
-  display: flex;
-  align-items: center;
-  margin-left: auto;
-}
-
-.tabs:empty + .actions {
-  margin-left: 0;
 }
 </style>
